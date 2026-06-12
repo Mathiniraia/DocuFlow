@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;850&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Helvetica Neue", Arial, "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@utility border-minimal {
+  border: 1px solid #e5e7eb;
+}
+
+@utility glass-panel {
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+@utility tool-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b7280;
+  white-space: nowrap;
+  transition: color 0.2s;
+}
+
+@utility tool-active {
+  color: #111827 !important;
+  border-bottom: 2px solid #111827;
+}
+
+@utility dropzone-dashed {
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+@utility stat-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
