@@ -8,13 +8,31 @@ import {
   Upload, FileText, CheckCircle, RefreshCw, Download, 
   Trash2, RotateCw, Shield, HelpCircle, AlertTriangle,
   Scissors, FileImage, Layers, ShieldCheck, Minimize2,
-  Lock, Plus, X, ArrowRight, Settings, Check, Clock, Calendar, Sparkles, ChevronRight
+  Lock, Plus, X, ArrowRight, Settings, Check, Clock, Calendar, Sparkles, ChevronRight,
+  Brain, ChevronDown, ChevronUp, Zap, BookOpen, List, Lightbulb
 } from "lucide-react";
 import { PDFDocument, degrees } from "pdf-lib";
 import { PDFFileInfo, ToolDefinition, ToolWorkspaceProps } from "../../types";
 import JSZip from "jszip";
 import { jsPDF } from "jspdf";
 import * as pdfjsLib from "pdfjs-dist";
+import { GoogleGenAI } from "@google/genai";
+import pdfWorkerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+async function trackToolInteraction(toolSlug: string) {
+  try {
+    await fetch("http://localhost:3001/api/admin/simulate-traffic", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-admin-email": "mathinirai.a@gmail.com"
+      },
+      body: JSON.stringify({ toolSlug })
+    });
+  } catch (err) {
+    console.error("Failed to sync tool metrics with CRM:", err);
+  }
+}
 
 export default function ToolWorkspace({
   tool,
@@ -60,6 +78,12 @@ export default function ToolWorkspace({
   const [isGeneratingPreviews, setIsGeneratingPreviews] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(false);
 
+  // ── AI Summarization States ──────────────────────────────────────────────
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiError, setAiError] = useState("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // When changing tools, reset workspace states
@@ -83,6 +107,11 @@ export default function ToolWorkspace({
     setPdfPreviews([]);
     setIsGeneratingPreviews(false);
     setIsEncrypted(false);
+    // Reset AI states
+    setAiPanelOpen(false);
+    setAiSummary("");
+    setAiError("");
+    setAiLoading(false);
   };
 
   // Drag & drop handlers
@@ -212,10 +241,10 @@ export default function ToolWorkspace({
     });
   };
 
-  const generatePreviews = async (pdfDocBytes: Uint8Array, userPassword?: string) => {
+  const generatePreviews = async (pdfDocBytes: Uint8Array, userPassword?: string): Promise<string[]> => {
     try {
       setPdfPreviews([]);
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
       
       const loadingTask = pdfjsLib.getDocument({ 
         data: pdfDocBytes,
@@ -246,11 +275,13 @@ export default function ToolWorkspace({
       }
       setPdfPreviews(urlArr);
       setIsEncrypted(false);
+      return urlArr;
     } catch (err: any) {
       console.warn("Unable to generate PDF pages previews:", err.message);
       if (err.name === "PasswordException") {
         setIsEncrypted(true);
       }
+      return [];
     }
   };
 
@@ -390,6 +421,9 @@ export default function ToolWorkspace({
         setProcessingMessage("Decrypting, removing file permissions lock, and stripping passkey structures...");
         await doUnlockPDF();
       }
+      
+      // Track tool interaction metrics
+      await trackToolInteraction(`/${tool.slug}`);
     } catch (err: any) {
       console.error(err);
       setDragError(`Execution Error: ${err.message || "Failed to process PDF."}`);
@@ -514,8 +548,7 @@ export default function ToolWorkspace({
 
     let activePreviews = pdfPreviews;
     if (activePreviews.length === 0) {
-      await generatePreviews(f.pdfBytes, password);
-      activePreviews = pdfPreviews;
+      activePreviews = await generatePreviews(f.pdfBytes, password);
     }
 
     if (activePreviews.length === 0) {
@@ -646,8 +679,7 @@ export default function ToolWorkspace({
 
     let activePreviews = pdfPreviews;
     if (activePreviews.length === 0) {
-      await generatePreviews(f.pdfBytes);
-      activePreviews = pdfPreviews;
+      activePreviews = await generatePreviews(f.pdfBytes);
     }
 
     if (activePreviews.length === 0) {
@@ -713,15 +745,130 @@ export default function ToolWorkspace({
     setStage(3);
   };
 
+  // ── AI PDF SUMMARIZATION ENGINE ──────────────────────────────────────────
+  /**
+   * Extracts raw text from all pages of a PDF using pdfjs-dist.
+   */
+  const extractTextFromPDF = async (pdfBytes: Uint8Array): Promise<string> => {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc;
+    const loadingTask = pdfjsLib.getDocument({ data: pdfBytes });
+    const pdf = await loadingTask.promise;
+    const numPages = pdf.numPages;
+    const pageTexts: string[] = [];
+
+    // Extract text from up to 20 pages to keep prompt size reasonable
+    const limit = Math.min(numPages, 20);
+    for (let i = 1; i <= limit; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(" ")
+        .trim();
+      if (pageText) pageTexts.push(`--- Page ${i} ---\n${pageText}`);
+    }
+
+    return pageTexts.join("\n\n");
+  };
+
+  /**
+   * Calls the Gemini API to summarize/analyse the extracted PDF text.
+   * Streams the response into aiSummary state.
+   */
+  const runAISummarize = async () => {
+    if (!files[0]?.pdfBytes) return;
+
+    setAiLoading(true);
+    setAiSummary("");
+    setAiError("");
+    setAiPanelOpen(true);
+
+    try {
+      // 1. Extract text from PDF
+      const extractedText = await extractTextFromPDF(files[0].pdfBytes);
+
+      if (!extractedText.trim()) {
+        setAiError(
+          "Could not extract readable text from this PDF. It may be a scanned image-only document."
+        );
+        setAiLoading(false);
+        return;
+      }
+
+      // 2. Initialise Gemini client using VITE_ env var
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey || apiKey.startsWith("AIzaSyDemo")) {
+        setAiError(
+          "Gemini API key not configured. Add your VITE_GEMINI_API_KEY to the .env file and restart the dev server."
+        );
+        setAiLoading(false);
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+
+      // 3. Build prompt
+      const prompt = `You are an expert document analyst. Analyse the following PDF content and provide a rich, structured summary.
+
+Format your response using this exact structure with markdown:
+
+## 📄 Document Overview
+Brief 2-3 sentence overview of what this document is about.
+
+## 🎯 Key Topics
+A bullet list of the 5-8 main topics covered.
+
+## 📌 Key Insights & Findings
+A bullet list of the most important insights, facts, or conclusions from the document.
+
+## 💡 Recommendations or Action Items
+Any recommendations, action items, or next steps mentioned (if applicable). If none, write "No explicit recommendations found."
+
+## 🗒️ Document Statistics
+- **Estimated reading time**: X minutes
+- **Document type**: (e.g., Report, Contract, Manual, Research Paper, Invoice, etc.)
+- **Primary audience**: Who this document seems intended for
+- **Language & tone**: (e.g., Technical, Formal, Casual, Legal, etc.)
+
+---
+
+Here is the PDF content to analyse:
+
+${extractedText.slice(0, 30000)}`;
+
+      // 4. Stream the response
+      const stream = await ai.models.generateContentStream({
+        model: "gemini-2.0-flash",
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
+
+      let accumulated = "";
+      for await (const chunk of stream) {
+        const chunkText = chunk.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        accumulated += chunkText;
+        setAiSummary(accumulated);
+      }
+    } catch (err: any) {
+      console.error("AI Summarize error:", err);
+      setAiError(
+        err?.message || "An error occurred while communicating with Gemini API."
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // Download Trigger helper
   const handleDownloadFile = () => {
     if (!outputBlob) return;
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(outputBlob);
+    const objectUrl = URL.createObjectURL(outputBlob);
+    link.href = objectUrl;
     link.download = outputFileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   };
 
   // Format File Size
@@ -737,6 +884,47 @@ export default function ToolWorkspace({
   const getPercentageSaved = () => {
     if (originalSize <= newSize) return 0;
     return Math.round(((originalSize - newSize) / originalSize) * 100);
+  };
+
+  // ── Markdown-to-JSX simple renderer ────────────────────────────────────
+  const renderMarkdown = (text: string) => {
+    return text.split("\n").map((line, i) => {
+      // H2 headings
+      if (line.startsWith("## ")) {
+        return (
+          <h3 key={i} className="text-sm font-bold text-neutral-900 mt-5 mb-2 flex items-center gap-1.5">
+            {line.replace("## ", "")}
+          </h3>
+        );
+      }
+      // HR
+      if (line.trim() === "---") {
+        return <hr key={i} className="border-neutral-200 my-3" />;
+      }
+      // Bullet points
+      if (line.startsWith("- ") || line.startsWith("* ")) {
+        const content = line.replace(/^[-*] /, "");
+        return (
+          <div key={i} className="flex items-start gap-2 text-xs text-neutral-600 leading-relaxed py-0.5">
+            <span className="text-neutral-400 shrink-0 mt-0.5">•</span>
+            <span dangerouslySetInnerHTML={{ __html: content.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }} />
+          </div>
+        );
+      }
+      // Bold key-value lines
+      if (line.includes("**")) {
+        return (
+          <p key={i} className="text-xs text-neutral-600 leading-relaxed py-0.5"
+            dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>") }}
+          />
+        );
+      }
+      // Regular paragraph
+      if (line.trim()) {
+        return <p key={i} className="text-xs text-neutral-600 leading-relaxed py-0.5">{line}</p>;
+      }
+      return null;
+    });
   };
 
   return (
@@ -767,6 +955,24 @@ export default function ToolWorkspace({
 
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-neutral-400">Attempts Today: {usageCount}/3</span>
+
+            {/* ── AI Summarize Button — visible when a PDF is loaded ── */}
+            {files.length > 0 && tool.slug !== "jpg-to-pdf" && (
+              <button
+                onClick={runAISummarize}
+                disabled={aiLoading}
+                title="AI-powered PDF analysis using Gemini"
+                id="ai_summarize_btn"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white px-3 py-1.5 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {aiLoading ? (
+                  <><RefreshCw size={12} className="animate-spin" /> Analysing...</>
+                ) : (
+                  <><Brain size={12} /> AI Analyse</>  
+                )}
+              </button>
+            )}
+
             {files.length > 0 && stage === 1 && (
               <button 
                 onClick={resetStates}
@@ -778,6 +984,83 @@ export default function ToolWorkspace({
             )}
           </div>
         </div>
+
+        {/* ── AI ANALYSIS PANEL ───────────────────────────────────────────── */}
+        {aiPanelOpen && (
+          <div
+            className="border-b border-violet-100 bg-gradient-to-br from-violet-50/80 via-indigo-50/60 to-white"
+            id="ai_summary_panel"
+          >
+            {/* Panel header */}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-violet-100/60">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-sm">
+                  <Brain size={14} className="text-white" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-neutral-900">Gemini AI Analysis</span>
+                  <span className="text-[10px] text-violet-500 font-mono ml-2">powered by Google AI Studio</span>
+                </div>
+                {aiLoading && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-violet-600 bg-violet-100 border border-violet-200 px-2 py-0.5 rounded-full animate-pulse">
+                    <Zap size={9} /> Streaming response...
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setAiPanelOpen(false)}
+                className="p-1 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 rounded-lg transition"
+                title="Close AI panel"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Panel body */}
+            <div className="px-6 py-4 max-h-96 overflow-y-auto">
+              {aiError ? (
+                <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+                  <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-red-700">Analysis Failed</p>
+                    <p className="text-xs text-red-600 mt-0.5">{aiError}</p>
+                  </div>
+                </div>
+              ) : aiLoading && !aiSummary ? (
+                <div className="flex flex-col items-center justify-center py-8 gap-3">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-100 to-indigo-100 flex items-center justify-center">
+                    <RefreshCw size={20} className="animate-spin text-violet-600" />
+                  </div>
+                  <p className="text-xs text-neutral-500 font-mono">Extracting text & calling Gemini API...</p>
+                </div>
+              ) : aiSummary ? (
+                <div className="space-y-0.5">
+                  {renderMarkdown(aiSummary)}
+                  {aiLoading && (
+                    <span className="inline-block w-1.5 h-4 bg-violet-500 rounded-sm animate-pulse ml-0.5" />
+                  )}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Panel footer */}
+            {aiSummary && !aiLoading && (
+              <div className="px-6 py-2.5 border-t border-violet-100/60 flex items-center justify-between">
+                <span className="text-[10px] text-neutral-400 font-mono flex items-center gap-1">
+                  <ShieldCheck size={11} className="text-emerald-500" />
+                  Text extracted locally • Summary generated by Gemini 2.0 Flash
+                </span>
+                <button
+                  onClick={runAISummarize}
+                  className="text-[10px] font-semibold text-violet-600 hover:text-violet-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <RefreshCw size={10} /> Re-analyse
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
 
         {/* WORKSPACE BODY - Multi Stage */}
         <div className="p-6">
@@ -1229,31 +1512,31 @@ export default function ToolWorkspace({
                     {/* PROTECT PDF KEYWORDS ENTRY */}
                     {tool.slug === "protect-pdf" && (
                       <div>
-                        <label className="block text-xs font-semibold text-neutral-800 tracking-wide uppercase mb-2">Configure File Passkey Encryption</label>
+                        <label className="block text-xs font-semibold text-neutral-800 tracking-wide uppercase mb-2">Create Protected Copy</label>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <span className="text-xs text-neutral-500 block mb-1">Target protect file:</span>
+                            <span className="text-xs text-neutral-500 block mb-1">Target PDF file:</span>
                             <div className="flex items-center gap-2 py-1">
                               <FileText size={16} className="text-neutral-600" />
                               <span className="text-xs font-semibold text-neutral-800 truncate max-w-xs">{files[0].name}</span>
                             </div>
-                            <p className="text-[10px] text-neutral-400 mt-1">This uses localized stream encryption to scramble elements securely.</p>
+                            <p className="text-[10px] text-neutral-400 mt-1">The exported copy will be encrypted in your browser before download.</p>
                           </div>
                           <div>
-                            <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">Enter standard password string:</label>
+                            <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">Enter password for the protected copy:</label>
                             <div className="relative">
                               <input 
                                 type="password" 
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter secure lock key..."
+                                placeholder="Create a password..."
                                 className="w-full text-xs bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-neutral-900 font-mono"
                                 id="password_input_protect"
                               />
                               <Lock size={14} className="absolute left-3 top-2.5 text-neutral-400" />
                             </div>
                             <p className="text-[9px] text-amber-600 mt-1.5 flex items-center gap-1 font-sans">
-                              <AlertTriangle size={11} /> Keep a note of it. Passwords cannot be retrieved due to high-security offline design.
+                              <AlertTriangle size={11} /> Keep a note of it. We do not store passwords, so they cannot be recovered later.
                             </p>
                           </div>
                         </div>
@@ -1263,31 +1546,31 @@ export default function ToolWorkspace({
                     {/* UNLOCK PDF KEYS ENTRY */}
                     {tool.slug === "unlock-pdf" && (
                       <div>
-                        <label className="block text-xs font-semibold text-neutral-800 tracking-wide uppercase mb-2 font-mono">Authorize File Decryption</label>
+                        <label className="block text-xs font-semibold text-neutral-800 tracking-wide uppercase mb-2 font-mono">Create Unlocked Copy</label>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
-                            <span className="text-xs text-neutral-500 block mb-1">Target protect file:</span>
+                            <span className="text-xs text-neutral-500 block mb-1">Target protected file:</span>
                             <div className="flex items-center gap-2 py-1">
                               <FileText size={16} className="text-neutral-600" />
                               <span className="text-xs font-semibold text-neutral-800 truncate max-w-xs">{files[0].name}</span>
                             </div>
-                            <p className="text-[10px] text-neutral-400 mt-1 font-sans">This strips access locks and security credentials from the PDF permanently.</p>
+                            <p className="text-[10px] text-neutral-400 mt-1 font-sans">Enter the password to create an unlocked copy that opens without prompts.</p>
                           </div>
                           <div>
-                            <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">Enter document password:</label>
+                            <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">Enter the document password:</label>
                             <div className="relative">
                               <input 
                                 type="password" 
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Decrypt password..."
+                                placeholder="Enter the original password..."
                                 className="w-full text-xs bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-neutral-900 font-mono"
                                 id="password_input_unlock"
                               />
                               <Lock size={14} className="absolute left-3 top-2.5 text-neutral-400" />
                             </div>
                             <p className="text-[9px] text-neutral-400 mt-1.5 font-sans">
-                              Provide the correct password to allow local decryption algorithms to clean headers.
+                              The password is used locally to open the file and export a decrypted copy.
                             </p>
                           </div>
                         </div>
@@ -1324,7 +1607,12 @@ export default function ToolWorkspace({
                         className="text-xs font-semibold text-white bg-neutral-900 hover:bg-neutral-800 border border-neutral-900 rounded-lg px-6 py-2 shadow-xs hover:shadow-sm tracking-wide shrink-0 font-mono flex-1 sm:flex-none text-center flex items-center justify-center gap-1.5 cursor-pointer"
                         id="compile_pdf_btn_id"
                       >
-                        Compile & Export <ArrowRight size={14} />
+                        {tool.slug === "protect-pdf"
+                          ? "Create Protected Copy"
+                          : tool.slug === "unlock-pdf"
+                            ? "Create Unlocked Copy"
+                            : "Compile & Export"}{" "}
+                        <ArrowRight size={14} />
                       </button>
                     </div>
                   </div>
@@ -1359,8 +1647,20 @@ export default function ToolWorkspace({
                 <CheckCircle size={32} />
               </div>
               
-              <h3 className="text-lg font-bold text-neutral-950 mb-1">Document Compiled Successfully!</h3>
-              <p className="text-xs text-neutral-500 mb-6">Your modified document has been generated and is ready for download.</p>
+              <h3 className="text-lg font-bold text-neutral-950 mb-1">
+                {tool.slug === "protect-pdf"
+                  ? "Protected Copy Created Successfully!"
+                  : tool.slug === "unlock-pdf"
+                    ? "Unlocked Copy Created Successfully!"
+                    : "Document Compiled Successfully!"}
+              </h3>
+              <p className="text-xs text-neutral-500 mb-6">
+                {tool.slug === "protect-pdf"
+                  ? "Your password-protected PDF copy has been generated and is ready for download."
+                  : tool.slug === "unlock-pdf"
+                    ? "Your decrypted PDF copy has been generated and is ready for download."
+                    : "Your modified document has been generated and is ready for download."}
+              </p>
 
               {/* STATS COMPARISON MATRIX */}
               <div className="max-w-md mx-auto grid grid-cols-3 gap-3 p-4 bg-neutral-50 border border-neutral-200 rounded-xl mb-8">
@@ -1371,7 +1671,13 @@ export default function ToolWorkspace({
                 </div>
 
                 <div className="text-center p-2 border-r border-neutral-200">
-                  <span className="text-[10px] font-semibold text-neutral-400 tracking-wider uppercase block mb-1">Compiled Output</span>
+                  <span className="text-[10px] font-semibold text-neutral-400 tracking-wider uppercase block mb-1">
+                    {tool.slug === "protect-pdf"
+                      ? "Protected Output"
+                      : tool.slug === "unlock-pdf"
+                        ? "Unlocked Output"
+                        : "Compiled Output"}
+                  </span>
                   <span className="text-xs font-bold text-neutral-950 font-mono">{formatBytes(newSize)}</span>
                 </div>
 
@@ -1397,7 +1703,9 @@ export default function ToolWorkspace({
                   className="w-full sm:w-auto text-xs font-semibold text-neutral-600 hover:text-neutral-900 border border-neutral-200 rounded-lg px-5 py-2.5 bg-white shadow-2xs hover:shadow-xs transition font-mono"
                   id="process_another_btn"
                 >
-                  Process Another File
+                  {tool.slug === "protect-pdf" || tool.slug === "unlock-pdf"
+                    ? "Start Over"
+                    : "Process Another File"}
                 </button>
                 
                 <button 
@@ -1405,13 +1713,18 @@ export default function ToolWorkspace({
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-xs font-bold text-white bg-neutral-900 hover:bg-black rounded-lg px-8 py-2.5 shadow-sm hover:shadow-md transition font-mono cursor-pointer"
                   id="final_download_btn_id"
                 >
-                  <Download size={14} /> Download Document
+                  <Download size={14} />
+                  {tool.slug === "protect-pdf"
+                    ? "Download Protected Copy"
+                    : tool.slug === "unlock-pdf"
+                      ? "Download Unlocked Copy"
+                      : "Download Document"}
                 </button>
               </div>
 
               {/* Trust Disclaimer */}
               <p className="text-[10px] text-neutral-400 mt-6 flex items-center justify-center gap-1 font-mono">
-                <ShieldCheck size={12} className="text-emerald-500" /> Files never touch any storage units. Safe from unauthorized visibility.
+                <ShieldCheck size={12} className="text-emerald-500" /> Processing stays local in your browser until you download the file.
               </p>
 
             </div>

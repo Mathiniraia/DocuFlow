@@ -20,40 +20,46 @@ interface PaywallModalProps {
 
 const PLANS: PaymentPlan[] = [
   {
-    id: "daily",
-    name: "Daily Power Pass",
-    price: 29,
-    period: "24-Hour Access",
+    id: "monthly",
+    name: "Monthly Infinite Pro",
+    price: 299,
+    originalPrice: 1199,
+    period: "30-Day Period",
+    description: "30-Day complete toolkit license built for modern remote workflows.",
     benefits: [
-      "Completely unlimited PDF processes",
-      "Process up to 150MB per document",
-      "High performance multi-format engine",
-      "UPI & Credit/Debit Card support"
+      "✓ Full 30-Day unrestricted platform workspace access",
+      "✓ Highest priority processing priority for large documents",
+      "✓ Batch file handling (Merge or Convert multiple files at once)",
+      "✓ Premium customer support with direct troubleshooting"
     ]
   },
   {
     id: "weekly",
     name: "Weekly Project Pass",
     price: 99,
+    originalPrice: 399,
     period: "7-Day Period",
     popular: true,
+    description: "7-Day continuous access for multi-day document workflows and assignments.",
     benefits: [
-      "All Daily Pass premium access",
-      "Optimized ultra-high compression priority",
-      "Direct Priority rendering core",
-      "Full premium multi-device priority"
+      "✓ Includes all premium features of the Daily Pass",
+      "✓ Zero daily task caps or processing interruptions",
+      "✓ Priority cloud execution for massive multi-file processing",
+      "✓ Seamless usage across both mobile and desktop views"
     ]
   },
   {
-    id: "monthly",
-    name: "Monthly Infinite Pro",
-    price: 299,
-    period: "30-Day Period",
+    id: "daily",
+    name: "Daily Power Pass",
+    price: 29,
+    originalPrice: 116,
+    period: "24-Hour Access",
+    description: "24-Hour unlimited access to all premium tools with high-speed processing.",
     benefits: [
-      "Continuous premium browser assets",
-      "VIP multi-document parallel queues",
-      "Full access to experimental beta tools",
-      "Instant dedicated webhook endpoints"
+      "✓ 100% unrestricted access to all 12 PDF tools",
+      "✓ Process large files up to 150MB per document",
+      "✓ Maximum cloud compression and rendering speed",
+      "✓ Instant secure download with no queues or waiting"
     ]
   }
 ];
@@ -242,9 +248,17 @@ export default function PaywallModal({
               </p>
 
               {/* THREE REUSABLE PLAN TILES */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {PLANS.map((plan) => {
                   const isSelected = selectedPlan.id === plan.id;
+                  
+                  // Scale sizing based on plan pricing hierarchy, but keep boxes same size
+                  const sizeClasses = plan.id === "monthly"
+                    ? "p-5 rounded-xl text-sm border-2"
+                    : plan.id === "weekly"
+                      ? "p-5 rounded-xl text-sm border"
+                      : "p-5 rounded-xl text-sm border border-dashed";
+
                   return (
                     <button
                       key={plan.id}
@@ -252,9 +266,9 @@ export default function PaywallModal({
                         setSelectedPlan(plan);
                         setShowSandboxUI(false);
                       }}
-                      className={`w-full p-4 rounded-xl text-left border flex items-center justify-between transition-all duration-200 ${
+                      className={`w-full ${sizeClasses} text-left flex items-center justify-between transition-all duration-200 ${
                         isSelected 
-                          ? "bg-white border-neutral-900 shadow-sm ring-1 ring-neutral-900" 
+                          ? "bg-white border-neutral-900 shadow-md ring-1 ring-neutral-900" 
                           : "bg-white/40 border-neutral-200 hover:border-neutral-300"
                       }`}
                     >
@@ -266,7 +280,7 @@ export default function PaywallModal({
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-neutral-900">{plan.name}</span>
+                            <span className="font-bold text-neutral-900">{plan.name}</span>
                             {plan.popular && (
                               <span className="text-[9px] bg-neutral-900 text-white font-mono uppercase font-bold tracking-wide px-1.5 py-0.5 rounded">
                                 Recommended
@@ -277,9 +291,14 @@ export default function PaywallModal({
                         </div>
                       </div>
                       
-                      <div className="text-right">
-                        <span className="text-sm font-extrabold text-neutral-950 font-mono">₹{plan.price}</span>
-                        <span className="text-[10px] text-neutral-400 block font-mono">GST incl.</span>
+                      <div className="text-right flex flex-col justify-center">
+                        <span className="text-[10px] text-neutral-400 font-mono">
+                          <span className="line-through">₹{plan.originalPrice}</span>
+                          <span className="text-red-500 font-bold ml-1">(75% OFF)</span>
+                        </span>
+                        <span className="font-mono text-neutral-950 font-black block mt-0.5 text-xl">
+                          → ₹{plan.price}
+                        </span>
                       </div>
                     </button>
                   );
@@ -327,7 +346,7 @@ export default function PaywallModal({
                 <div className="mb-6 p-4 bg-neutral-50 rounded-xl border border-neutral-200/60">
                   <span className="text-[9px] font-bold text-neutral-400 tracking-wider uppercase font-mono block mb-1">Your Selection:</span>
                   <div className="text-sm font-extrabold text-neutral-900 mb-1">{selectedPlan.name}</div>
-                  <div className="text-xs text-neutral-500">{selectedPlan.period} access and infinite daily limits.</div>
+                  <div className="text-xs text-neutral-500">{selectedPlan.description}</div>
                   
                   <div className="mt-4 flex items-baseline gap-1.5 border-t border-neutral-200/50 pt-2.5">
                     <span className="text-2xl font-black font-mono text-neutral-950">₹{selectedPlan.price}</span>
@@ -339,7 +358,7 @@ export default function PaywallModal({
                   {selectedPlan.benefits.map((b, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <span className="text-emerald-500 mt-0.5">✓</span>
-                      <span>{b}</span>
+                      <span>{b.replace(/^✓\s*/, "")}</span>
                     </li>
                   ))}
                 </ul>
@@ -356,13 +375,13 @@ export default function PaywallModal({
                     </>
                   ) : (
                     <>
-                      Pay Securely with UPI/Card <ArrowRight size={14} />
+                      Pay Securely with UPI/Card →
                     </>
                   )}
                 </button>
                 
                 <p className="text-[9px] text-neutral-400 tracking-wide text-center mt-3 flex items-center justify-center gap-1 font-mono">
-                  <Lock size={9} /> Secured with Razorpay Encryption Standard
+                  🔒 Secured with Razorpay Encryption Standard
                 </p>
               </div>
             ) : (

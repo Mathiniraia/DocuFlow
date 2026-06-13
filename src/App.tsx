@@ -34,8 +34,103 @@ export default function App() {
     return localStorage.getItem("user_email");
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authMode, setAuthMode] = useState<"signin" | "signup" | "phone">("signup");
   const [authEmailInput, setAuthEmailInput] = useState("");
+  const [authPasswordInput, setAuthPasswordInput] = useState("");
+  const [authConfirmPasswordInput, setAuthConfirmPasswordInput] = useState("");
+  const [authPhoneInput, setAuthPhoneInput] = useState("");
+  const [authOtpInput, setAuthOtpInput] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  const resetAuthForm = () => {
+    setAuthEmailInput("");
+    setAuthPasswordInput("");
+    setAuthConfirmPasswordInput("");
+    setAuthPhoneInput("");
+    setAuthOtpInput("");
+    setOtpSent(false);
+    setAuthError("");
+  };
+
+  const syncUserSession = async (
+    name: string,
+    contactInfo: string,
+    planStatus: string = "free",
+    authProvider: "email" | "google" | "phone" = "email"
+  ) => {
+    try {
+      const isEmail = contactInfo.includes("@") && !contactInfo.endsWith("@phone.otp");
+      await fetch("/api/crm/sync-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: name,
+          avatarUrl: `https://api.dicebear.com/7.x/adventurer/svg?seed=${name}`,
+          email: isEmail ? contactInfo : null,
+          phone: !isEmail ? contactInfo : null,
+          authProvider: authProvider,
+          planStatus: planStatus
+        })
+      });
+    } catch (err) {
+      console.error("Failed to sync user session:", err);
+    }
+  };
+
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+
+    if (authMode === "signup") {
+      if (!authEmailInput.includes("@")) {
+        setAuthError("Please enter a valid Gmail address.");
+        return;
+      }
+      if (authPasswordInput.length < 6) {
+        setAuthError("Password must be at least 6 characters long.");
+        return;
+      }
+      if (authPasswordInput !== authConfirmPasswordInput) {
+        setAuthError("Passwords do not match.");
+        return;
+      }
+      localStorage.setItem("user_email", authEmailInput);
+      setCurrentUserEmail(authEmailInput);
+      setShowAuthModal(false);
+      resetAuthForm();
+      syncUserSession(authEmailInput.split("@")[0], authEmailInput, premiumUnlocked ? "pro" : "free");
+    } else if (authMode === "signin") {
+      if (!authEmailInput) {
+        setAuthError("Please enter your Gmail address.");
+        return;
+      }
+      localStorage.setItem("user_email", authEmailInput);
+      setCurrentUserEmail(authEmailInput);
+      setShowAuthModal(false);
+      resetAuthForm();
+      syncUserSession(authEmailInput.split("@")[0], authEmailInput, premiumUnlocked ? "pro" : "free");
+    } else if (authMode === "phone") {
+      if (!otpSent) {
+        if (!authPhoneInput || authPhoneInput.length < 10) {
+          setAuthError("Please enter a valid phone number.");
+          return;
+        }
+        setOtpSent(true);
+      } else {
+        if (!authOtpInput || authOtpInput.length !== 6) {
+          setAuthError("Please enter the 6-digit OTP code.");
+          return;
+        }
+        const mockPhoneEmail = `${authPhoneInput}@phone.otp`;
+        localStorage.setItem("user_email", mockPhoneEmail);
+        setCurrentUserEmail(mockPhoneEmail);
+        setShowAuthModal(false);
+        resetAuthForm();
+        syncUserSession("Phone User", authPhoneInput, premiumUnlocked ? "pro" : "free");
+      }
+    }
+  };
 
   const handleScrollToTools = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -212,6 +307,17 @@ export default function App() {
     setPremiumUnlocked(true);
     setPremiumPlanName(planNameLabel);
     setIsPaywallOpen(false);
+
+    // Sync upgraded status to CRM and Supabase DB
+    if (currentUserEmail) {
+      const name = currentUserEmail.includes("@") && !currentUserEmail.endsWith("@phone.otp")
+        ? currentUserEmail.split("@")[0]
+        : "Phone User";
+      const isPhone = currentUserEmail.endsWith("@phone.otp");
+      const cleanContact = isPhone ? currentUserEmail.split("@")[0] : currentUserEmail;
+      
+      syncUserSession(name, cleanContact, "pro", isPhone ? "phone" : "email");
+    }
   };
 
   // Reset/Revoke Premium license for testing
@@ -255,13 +361,29 @@ export default function App() {
             </div>
           </button>
 
-          {/* User limit states / Auth status on far right */}
+           {/* User limit states / Auth status on far right */}
           <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsPaywallOpen(true)}
+              className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer font-bold"
+            >
+              Unlock Pro
+            </button>
+
             {currentUserEmail ? (
               <div className="flex items-center gap-3">
                 <span className="text-xs text-neutral-500 font-mono hidden sm:inline">
                   Logged in: <strong className="text-neutral-800 font-bold">{currentUserEmail}</strong>
                 </span>
+                {premiumUnlocked ? (
+                  <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles size={10} /> PRO LICENSE
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-neutral-100 text-neutral-600 font-mono px-2 py-0.5 rounded">
+                    Free Tier ({usageCount}/3)
+                  </span>
+                )}
                 <span className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center text-xs font-bold text-neutral-700 tracking-tight border border-neutral-200">
                   {currentUserEmail.charAt(0).toUpperCase()}
                 </span>
@@ -314,7 +436,10 @@ export default function App() {
               {/* Blur backdrop overlay */}
               <div 
                 className="absolute inset-0 bg-neutral-900/45 backdrop-blur-md transition-opacity duration-300"
-                onClick={() => setShowAuthModal(false)}
+                onClick={() => {
+                  setShowAuthModal(false);
+                  resetAuthForm();
+                }}
               />
               
               {/* Main Dialog Card */}
@@ -325,13 +450,15 @@ export default function App() {
                 
                 <div>
                   {/* Google-Style Branding Header */}
-                  <div className="flex flex-col items-center text-center space-y-4 mb-8">
+                  <div className="flex flex-col items-center text-center space-y-4 mb-6">
                     <div className="w-12 h-12 bg-black text-white rounded-xl flex items-center justify-center text-xl font-bold shadow-md">
                       P
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold tracking-tight text-neutral-900">
-                        {authMode === "signin" ? "Sign in to your account" : "Create your Free account"}
+                        {authMode === "signup" && "Create your Free Account"}
+                        {authMode === "signin" && "Sign In to PDF Easy"}
+                        {authMode === "phone" && "Login via Phone OTP"}
                       </h2>
                       <p className="text-xs text-neutral-400 mt-1">
                         One Tool for Every PDF Need
@@ -339,111 +466,229 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Mode Selector Tabs */}
-                  <div className="grid grid-cols-2 gap-1 bg-neutral-100 p-1 rounded-xl mb-6">
+                  {/* Mode Selector Tabs (3 Option Grid) */}
+                  <div className="grid grid-cols-3 gap-1 bg-neutral-100 p-1 rounded-xl mb-6">
                     <button
                       type="button"
-                      onClick={() => setAuthMode("signin")}
-                      className={`py-2 text-xs font-semibold rounded-lg transition-all ${authMode === "signin" ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"}`}
+                      onClick={() => {
+                        setAuthMode("signup");
+                        setAuthError("");
+                      }}
+                      className={`py-2 text-[10px] sm:text-xs font-semibold rounded-lg transition-all ${authMode === "signup" ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"}`}
+                    >
+                      Sign Up
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthMode("signin");
+                        setAuthError("");
+                      }}
+                      className={`py-2 text-[10px] sm:text-xs font-semibold rounded-lg transition-all ${authMode === "signin" ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"}`}
                     >
                       Sign In
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAuthMode("signup")}
-                      className={`py-2 text-xs font-semibold rounded-lg transition-all ${authMode === "signup" ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"}`}
+                      onClick={() => {
+                        setAuthMode("phone");
+                        setAuthError("");
+                      }}
+                      className={`py-2 text-[10px] sm:text-xs font-semibold rounded-lg transition-all ${authMode === "phone" ? "bg-white text-neutral-900 shadow-xs" : "text-neutral-500 hover:text-neutral-800"}`}
                     >
-                      Sign Up
+                      Phone OTP
                     </button>
                   </div>
 
                   {/* Standard Google Single-Sign On (Social Mock Accent) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const email = "mathinirai.a@gmail.com";
-                      localStorage.setItem("user_email", email);
-                      setCurrentUserEmail(email);
-                      setShowAuthModal(false);
-                      setAuthEmailInput("");
-                    }}
-                    className="w-full border border-neutral-200 hover:border-neutral-300 bg-white hover:bg-neutral-50 rounded-xl px-4 py-3 text-xs font-medium text-neutral-700 flex items-center justify-center gap-3 transition shadow-3xs cursor-pointer mb-6"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <title>Google Logo</title>
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    Continue with Google
-                  </button>
+                  {authMode !== "phone" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const email = "mathinirai.a@gmail.com";
+                          localStorage.setItem("user_email", email);
+                          setCurrentUserEmail(email);
+                          setShowAuthModal(false);
+                          resetAuthForm();
+                          syncUserSession("Google User", email, premiumUnlocked ? "pro" : "free", "google");
+                        }}
+                        className="w-full border border-neutral-200 hover:border-neutral-300 bg-white hover:bg-neutral-50 rounded-xl px-4 py-3 text-xs font-medium text-neutral-700 flex items-center justify-center gap-3 transition shadow-3xs cursor-pointer mb-6"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24">
+                          <title>Google Logo</title>
+                          <path
+                            fill="#4285F4"
+                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                          />
+                        </svg>
+                        Continue with Google
+                      </button>
 
-                  <div className="relative flex items-center justify-center mb-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-neutral-150" />
-                    </div>
-                    <span className="relative bg-white px-3 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-                      or continue with email
-                    </span>
-                  </div>
+                      <div className="relative flex items-center justify-center mb-6">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-neutral-150" />
+                        </div>
+                        <span className="relative bg-white px-3 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                          or continue with details
+                        </span>
+                      </div>
+                    </>
+                  )}
 
-                  {/* Standard Credential Fields */}
-                  <form 
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const email = authEmailInput || "mathinirai.a@gmail.com";
-                      localStorage.setItem("user_email", email);
-                      setCurrentUserEmail(email);
-                      setShowAuthModal(false);
-                      setAuthEmailInput("");
-                    }}
-                    className="space-y-4"
-                  >
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
-                        Email Address
-                      </label>
-                      <input
-                        type="email"
-                        placeholder="name@company.com"
-                        value={authEmailInput || ""}
-                        onChange={(e) => setAuthEmailInput(e.target.value)}
-                        className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
-                        autoFocus
-                        required
-                      />
+                  {/* Auth Error Display */}
+                  {authError && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-150 text-red-600 rounded-xl text-xs font-medium flex items-center gap-2">
+                      <span>⚠️</span> {authError}
                     </div>
+                  )}
 
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
-                        Password
-                      </label>
-                      <input
-                        type="password"
-                        placeholder="••••••••••••"
-                        className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black bg-neutral-50/50"
-                        defaultValue="customsecurepassword"
-                      />
-                    </div>
+                  {/* Authentication Form */}
+                  <form onSubmit={handleAuthSubmit} className="space-y-4">
+                    {/* GMAIL SIGN UP FLOW */}
+                    {authMode === "signup" && (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                            Gmail Address
+                          </label>
+                          <input
+                            type="email"
+                            placeholder="your.email@gmail.com"
+                            value={authEmailInput}
+                            onChange={(e) => setAuthEmailInput(e.target.value)}
+                            className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                            Create Password
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="At least 6 characters"
+                            value={authPasswordInput}
+                            onChange={(e) => setAuthPasswordInput(e.target.value)}
+                            className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                            Confirm Password
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="Re-enter password"
+                            value={authConfirmPasswordInput}
+                            onChange={(e) => setAuthConfirmPasswordInput(e.target.value)}
+                            className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* GMAIL SIGN IN FLOW */}
+                    {authMode === "signin" && (
+                      <>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                            Gmail Address
+                          </label>
+                          <input
+                            type="email"
+                            placeholder="your.email@gmail.com"
+                            value={authEmailInput}
+                            onChange={(e) => setAuthEmailInput(e.target.value)}
+                            className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                            Password
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="••••••••"
+                            value={authPasswordInput}
+                            onChange={(e) => setAuthPasswordInput(e.target.value)}
+                            className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                            required
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {/* PHONE OTP FLOW */}
+                    {authMode === "phone" && (
+                      <>
+                        {!otpSent ? (
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-1.5">
+                              Phone Number
+                            </label>
+                            <input
+                              type="tel"
+                              placeholder="+91 98765 43210"
+                              value={authPhoneInput}
+                              onChange={(e) => setAuthPhoneInput(e.target.value)}
+                              className="w-full text-sm px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                              required
+                            />
+                          </div>
+                        ) : (
+                          <div>
+                            <div className="flex justify-between items-center mb-1.5">
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                                Enter 6-Digit OTP
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setOtpSent(false)}
+                                className="text-[10px] text-sky-600 font-bold hover:underline cursor-pointer"
+                              >
+                                Edit Phone Number
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              maxLength={6}
+                              placeholder="123456"
+                              value={authOtpInput}
+                              onChange={(e) => setAuthOtpInput(e.target.value.replace(/\D/g, ""))}
+                              className="w-full text-center text-lg tracking-widest font-mono py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-black"
+                              required
+                            />
+                            <p className="text-[10px] text-neutral-400 mt-1.5 text-center">
+                              Enter any 6-digit code for mock verification.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
 
                     <button
                       type="submit"
                       className="w-full bg-neutral-900 hover:bg-neutral-800 text-white font-medium py-3 rounded-xl text-sm transition shadow-sm cursor-pointer mt-4"
                     >
-                      {authMode === "signin" ? "Sign In" : "Sign Up"}
+                      {authMode === "signup" && "Sign Up with Gmail"}
+                      {authMode === "signin" && "Sign In with Gmail"}
+                      {authMode === "phone" && (!otpSent ? "Send OTP Code" : "Verify & Login")}
                     </button>
                   </form>
                 </div>
@@ -452,7 +697,10 @@ export default function App() {
                   <span className="hover:underline cursor-pointer">Help Center</span>
                   <button
                     type="button"
-                    onClick={() => setShowAuthModal(false)}
+                    onClick={() => {
+                      setShowAuthModal(false);
+                      resetAuthForm();
+                    }}
                     className="text-neutral-500 hover:text-neutral-900 font-medium cursor-pointer"
                   >
                     Go Back to Tools
@@ -620,64 +868,95 @@ export default function App() {
               </div>
 
               {/* Right Column: Abstract Isometric Graphic Assets Panel */}
-              <div className="relative w-full h-80 bg-neutral-100/50 rounded-2xl border border-neutral-200 overflow-hidden flex items-center justify-center p-6" id="workspace_isometric_visual_panel">
+              <div className="relative w-full h-[360px] bg-neutral-50 rounded-[32px] border border-neutral-200/80 overflow-hidden flex items-center justify-center p-6 shadow-sm" id="workspace_isometric_visual_panel">
                 {/* Light technical dots wallpaper in sandbox background */}
-                <div className="absolute inset-0 opacity-10" style={{
-                  backgroundImage: `radial-gradient(#000 1px, transparent 1px)`,
-                  backgroundSize: '16px 16px'
+                <div className="absolute inset-0 opacity-[0.15]" style={{
+                  backgroundImage: `radial-gradient(#000 1.5px, transparent 1.5px)`,
+                  backgroundSize: '24px 24px'
                 }} />
                 
                 {/* Floating soft blurred ambient backdrop */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-sky-100/30 rounded-full blur-3xl" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-sky-100/40 rounded-full blur-3xl" />
+
+                {/* Floating PDF Document Icon */}
+                <div className="absolute left-10 top-10 w-28 h-36 bg-white rounded-2xl border border-neutral-200 shadow-[0_15px_30px_-5px_rgba(0,0,0,0.15)] transform -rotate-[10deg] hover:-rotate-3 duration-300 transition-transform flex flex-col justify-between overflow-hidden z-20">
+                  {/* Red header with fold */}
+                  <div className="relative bg-[#EF4444] h-10 w-full flex-shrink-0">
+                    {/* Folded corner */}
+                    <div className="absolute top-0 right-0 w-6 h-6 bg-white" style={{ clipPath: 'polygon(100% 0, 0 0, 100% 100%)' }} />
+                    <div className="absolute top-0 right-0 w-6 h-6 bg-[#C81E1E] shadow-sm" style={{ clipPath: 'polygon(0 0, 0 100%, 100% 100%)' }} />
+                  </div>
+                  {/* Inside document mock lines */}
+                  <div className="p-4 flex-1 space-y-2 flex flex-col justify-center">
+                    <div className="h-1.5 w-full bg-slate-200 rounded-full" />
+                    <div className="h-1.5 w-11/12 bg-slate-200 rounded-full" />
+                    <div className="h-1.5 w-5/6 bg-slate-200 rounded-full" />
+                    <div className="h-1.5 w-4/6 bg-slate-200 rounded-full" />
+                  </div>
+                  {/* PDF banner at the bottom */}
+                  <div className="bg-[#EF4444] text-white font-extrabold text-xs py-1 px-3 uppercase tracking-wider shrink-0 text-left">
+                    PDF
+                  </div>
+                </div>
 
                 {/* Primary window sheet */}
-                <div className="relative w-80 h-48 bg-white/95 backdrop-blur-xs rounded-xl border border-neutral-200 shadow-md transform -rotate-3 hover:rotate-0 duration-500 transition-transform flex flex-col overflow-hidden">
-                  <div className="h-7 bg-neutral-50 border-b border-neutral-150 px-3 flex items-center justify-between shrink-0 select-none">
-                    <div className="flex gap-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-neutral-200" />
-                      <div className="w-1.5 h-1.5 rounded-full bg-neutral-200" />
-                      <div className="w-1.5 h-1.5 rounded-full bg-neutral-200" />
-                    </div>
-                    <span className="text-[9px] font-mono text-neutral-400">easy_document.pdf</span>
-                    <div className="w-4" />
+                <div className="relative w-[340px] h-[220px] bg-white/95 backdrop-blur-xs rounded-2xl border border-neutral-200 shadow-md transform -rotate-[1deg] hover:rotate-0 duration-500 transition-transform flex flex-col overflow-hidden z-10">
+                  {/* Window Header */}
+                  <div className="h-9 bg-white border-b border-black px-4 flex items-center justify-center shrink-0 select-none relative">
+                    <span className="text-[11px] font-mono text-neutral-500">easy_document.pdf</span>
                   </div>
-                  <div className="p-4 flex-1 flex flex-col justify-between">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold uppercase tracking-wider bg-sky-50 text-sky-600 border border-sky-100 px-1.5 py-0.5 rounded">PDF Easy</span>
-                        <span className="text-[10px] text-neutral-400 font-mono">2.4 MB</span>
+
+                  {/* Overlapping Badge Pill */}
+                  <div className="absolute top-[32px] left-[55%] -translate-x-1/2 -translate-y-1/2 z-30 flex items-center gap-1.5 py-1.5 px-4 bg-black text-white rounded-full text-[11px] font-bold shadow-md tracking-tight select-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    Instant PDF Processing
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-5 flex-1 flex flex-col justify-between pt-8">
+                    <div className="space-y-4">
+                      {/* Badge and Ref */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider bg-sky-100 text-sky-600 border border-sky-200/40 px-2 py-0.5 rounded-md">
+                          ASY
+                        </span>
+                        <span className="text-[11px] text-neutral-400 font-semibold font-mono tracking-tight">
+                          REF: #7249-X
+                        </span>
                       </div>
-                      <div className="h-2.5 w-11/12 bg-neutral-100 rounded" />
-                      <div className="h-2.5 w-2/3 bg-neutral-100 rounded" />
+                      
+                      {/* Lines mock */}
+                      <div className="space-y-2">
+                        <div className="h-2.5 w-11/12 bg-neutral-100 rounded-full" />
+                        <div className="h-2.5 w-2/3 bg-neutral-100 rounded-full" />
+                      </div>
                     </div>
-                    {/* Minimal trajectory vector line progress */}
+
+                    {/* Timeline slider representation */}
                     <div className="relative h-6 flex items-center mt-3">
-                      <div className="absolute left-0 right-0 h-0.5 bg-neutral-100" />
-                      <div className="absolute left-0 w-3/4 h-0.5 bg-neutral-900" />
-                      <div className="absolute left-3/4 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-black" />
+                      <div className="absolute left-0 right-0 h-0.5 bg-black" />
+                      <div className="absolute right-0 -translate-y-1/2 w-2 h-2 rounded-full bg-black" />
                     </div>
                   </div>
                 </div>
 
                 {/* Secondary accessory document layout */}
-                <div className="absolute right-6 bottom-4 w-28 h-20 bg-white border border-neutral-150 rounded-lg shadow-sm transform rotate-6 p-2.5 flex flex-col space-y-1">
-                  <span className="text-[8px] font-bold text-neutral-400">PAGE 1</span>
-                  <div className="h-1 w-full bg-neutral-100 rounded" />
-                  <div className="h-1 w-5/6 bg-neutral-100 rounded" />
-                  <div className="h-1 w-4/6 bg-neutral-100 rounded" />
-                  <div className="flex justify-between items-center pt-2 text-[8px] text-green-600 font-bold shrink-0">
-                    <span>Parsed</span>
-                    <span>✓</span>
+                <div className="absolute right-8 bottom-6 w-40 h-[110px] bg-white border border-neutral-200 rounded-xl shadow-lg transform rotate-[4deg] hover:rotate-0 duration-300 transition-transform p-4 flex flex-col justify-between z-20">
+                  <div className="space-y-2">
+                    <span className="text-[9px] font-bold text-neutral-400 tracking-wider block">PAGE 1</span>
+                    <div className="h-1 w-full bg-neutral-100 rounded-full" />
+                    <div className="h-1 w-5/6 bg-neutral-100 rounded-full" />
+                  </div>
+                  <div className="flex justify-between items-center text-[11px] shrink-0 font-bold">
+                    <span className="text-emerald-600">Parsed</span>
+                    <span className="text-emerald-600">✓</span>
                   </div>
                 </div>
 
-                {/* Interactive cursor label mimic */}
-                <div className="absolute top-1/4 right-1/3 transform scale-95 pointer-events-none">
-                  <div className="flex items-center gap-1.5 py-1 px-2.5 bg-neutral-950 text-white rounded-full text-[9px] font-bold shadow-md">
-                    <span className="w-1 h-1 rounded-full bg-sky-400 animate-pulse" /> Instant PDF Processing
-                  </div>
-                  <svg className="w-4 h-4 text-neutral-900 fill-current mt-1 -ml-1 drop-shadow-xs" viewBox="0 0 24 24">
-                    <path d="M4 4l8 16 3-6 6-3z" />
+                {/* Interactive cursor pointer */}
+                <div className="absolute top-[105px] left-[138px] z-30 transform -rotate-[15deg]">
+                  <svg className="w-5 h-5 text-neutral-900 fill-current drop-shadow-[0_2px_4px_rgba(0,0,0,0.2)]" viewBox="0 0 24 24">
+                    <path d="M4.5 3v15.2l3.8-3.8 3.1 7.2 2.6-1.1-3-7.1h5.8z" />
                   </svg>
                 </div>
               </div>
@@ -814,7 +1093,12 @@ export default function App() {
             <button onClick={() => navigateToSlug("split-pdf")} className="hover:text-black transition-colors cursor-pointer">Split</button>
             <button onClick={() => navigateToSlug("compress-pdf")} className="hover:text-black transition-colors cursor-pointer">Compress</button>
             <button onClick={() => navigateToSlug("protect-pdf")} className="hover:text-black transition-colors cursor-pointer">Protect</button>
-            <button onClick={() => setIsPaywallOpen(true)} className="hover:text-black transition-colors cursor-pointer text-neutral-600 font-semibold font-mono">Unlock Pro</button>
+            <button 
+              onClick={() => setIsPaywallOpen(true)} 
+              className="bg-black hover:bg-neutral-800 text-white font-bold px-4 py-2 rounded-lg text-sm transition duration-200 cursor-pointer select-none"
+            >
+              Unlock Pro
+            </button>
           </div>
         </div>
       </footer>

@@ -128,35 +128,35 @@ export const TOOLS: ToolDefinition[] = [
   {
     slug: "protect-pdf",
     name: "Protect PDF",
-    description: "Secure and encrypt your PDF document using custom passwords.",
+    description: "Create a password-protected copy of your PDF with local browser encryption.",
     iconName: "Shield",
     steps: [
-      { title: "Load Document", desc: "Select the document you wish to safeguard." },
-      { title: "Specify Password", desc: "Enter a robust string password to lock your file." },
-      { title: "Generate Secure PDF", desc: "Download the fully encrypted password-locked standard file format." }
+      { title: "Load Document", desc: "Choose the PDF you want to protect." },
+      { title: "Set Password", desc: "Enter a password for the protected copy." },
+      { title: "Download Protected Copy", desc: "Save the encrypted PDF and store the password safely." }
     ],
     faqs: [
-      { q: "What standard of encryption is used?", a: "The browser library configures native PDF Standard Encryption parameters so standard readers (Chrome, Adobe) prompt for the password." },
-      { q: "Are passwords transmitted over the network?", a: "No. The secure encryption properties apply directly onto your file." },
-      { q: "Can you recover my password if I lose it?", a: "Since we do not store passkeys, we cannot recover passwords. Please store them carefully!" }
+      { q: "What kind of encryption is used?", a: "The browser applies PDF Standard Encryption, so common readers will prompt for the password." },
+      { q: "Is my password sent anywhere?", a: "No. It stays in your browser while the PDF is being created." },
+      { q: "Can you recover my password if I lose it?", a: "No. We do not store passwords, so please keep it somewhere safe." }
     ],
-    seoText: "Apply solid custom password encryption properties onto your PDF reports directly from your browser. Ideal for legal, corporate, and official financial statements."
+    seoText: "Create password-protected PDF copies directly in your browser. Ideal for legal, corporate, and official documents."
   },
   {
     slug: "unlock-pdf",
     name: "Unlock PDF / Remove Password",
-    description: "Remove passwords, restriction blocks, and encryption protections from PDF files permanently.",
+    description: "Create a decrypted PDF copy after entering the correct password.",
     iconName: "Lock",
     steps: [
-      { title: "Select Protected PDF", desc: "Select the password-secured PDF file you wish to unlock." },
-      { title: "Input Password", desc: "Provide the active password to authorize decoding of the document." },
-      { title: "Download Decrypted", desc: "Export and save a cleanly decrypted PDF version with no locks." }
+      { title: "Select Protected PDF", desc: "Choose the password-secured PDF you want to open." },
+      { title: "Enter Password", desc: "Type the correct password for this file." },
+      { title: "Download Unlocked Copy", desc: "Save a copy that opens without the original password." }
     ],
     faqs: [
-      { q: "Can I unlock a PDF if I do not know the password?", a: "To respect privacy and security guidelines, you must enter the password once so our local decryptor can securely strip the security elements." },
-      { q: "Is the unlocked file fully unencrypted?", a: "Yes. Once processed, all security restrictions are stripped. Anyone can open, view, or print the PDF without any password prompts." },
-      { q: "Does PDF Easy keep my password?", a: "No. The password is only used in your local browser memory space to decrypt the file, and is never logged, kept, or transmitted." }
+      { q: "Can I unlock a PDF if I do not know the password?", a: "No. You must enter the correct password to create an unlocked copy." },
+      { q: "Is the unlocked file fully unencrypted?", a: "Yes. The exported copy opens without password prompts." },
+      { q: "Does PDF Easy keep my password?", a: "No. The password is used locally in your browser and is not stored or sent anywhere." }
     ],
-    seoText: "Decrypt and strip restrictive passwords or access blocks from your PDF documents instantly. Perfect for unlocking statements and records for easy sharing."
+    seoText: "Create unlocked PDF copies after entering the correct password. Perfect for preparing statements and records for easy sharing."
   }
 ];

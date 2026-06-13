@@ -36,5 +36,7 @@ export interface PaymentPlan {
   price: number;
   period: string;
   popular?: boolean;
+  originalPrice?: number;
   benefits: string[];
+  description?: string;
 }
