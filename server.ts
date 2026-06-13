@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-const PORT = 3000;
+const PORT = 5173;
 
 // Lazy Razorpay initialization
 let razorpayInstance: any = null;
