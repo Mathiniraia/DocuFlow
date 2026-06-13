@@ -1,5 +1,5 @@
 {
-  "name": "Minimalist PDF Utility",
+  "name": "PDF Easy",
   "description": "A high-performance, minimalist PDF utility platform with client-side PDF merging, splitting, format conversions, page exclusion, and rotation.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
