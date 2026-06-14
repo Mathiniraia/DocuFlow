@@ -15,7 +15,7 @@ import { TOOLS } from "./toolsData";
 import { ToolDefinition } from "./types";
 import ToolWorkspace from "./components/tools/ToolWorkspace";
 import PaywallModal from "./components/payment/PaywallModal";
-import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect, onAuthStateChanged } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 
 export default function App() {
@@ -569,9 +569,18 @@ export default function App() {
                             setShowAuthModal(false);
                             resetAuthForm();
                             navigateToSlug("");
-                          } catch (error) {
+                          } catch (error: any) {
                             console.error("Google login failed", error);
-                            setAuthError("Google login failed. Please try again.");
+                            if (error?.code === "auth/popup-blocked" || error?.message?.includes("popup-blocked")) {
+                              try {
+                                await signInWithRedirect(auth, googleProvider);
+                              } catch (redirectErr) {
+                                console.error("Google redirect login failed", redirectErr);
+                                setAuthError("Redirect login failed. Please enable popups or try again.");
+                              }
+                            } else {
+                              setAuthError("Google login failed. Please try again.");
+                            }
                           }
                         }}
                         className="w-full border border-neutral-200 hover:border-neutral-300 bg-white hover:bg-neutral-50 rounded-xl px-4 py-3 text-xs font-medium text-neutral-700 flex items-center justify-center gap-3 transition shadow-3xs cursor-pointer mb-6"
