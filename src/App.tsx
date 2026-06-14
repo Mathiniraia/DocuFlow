@@ -9,7 +9,7 @@ import {
   Minimize2, Shield, Gem, HelpCircle, Check, Sparkles, 
   ChevronDown, ChevronRight, Info, Clock, AlertTriangle, 
   ShieldCheck, Heart, ExternalLink, ArrowRight, FileText, 
-  Compass, ArrowLeft, RefreshCw, Lock
+  Compass, ArrowLeft, RefreshCw, Lock, PenTool, FileSignature
 } from "lucide-react";
 import { TOOLS } from "./toolsData";
 import { ToolDefinition } from "./types";
@@ -180,6 +180,22 @@ export default function App() {
         return {
           bg: "bg-teal-50 text-teal-600 border-teal-100 group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600",
         };
+      case "pdf-to-word":
+        return {
+          bg: "bg-blue-50 text-blue-600 border-blue-100 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600",
+        };
+      case "word-to-pdf":
+        return {
+          bg: "bg-cyan-50 text-cyan-600 border-cyan-100 group-hover:bg-cyan-600 group-hover:text-white group-hover:border-cyan-600",
+        };
+      case "edit-pdf":
+        return {
+          bg: "bg-amber-50 text-amber-600 border-amber-100 group-hover:bg-amber-600 group-hover:text-white group-hover:border-amber-600",
+        };
+      case "sign-pdf":
+        return {
+          bg: "bg-fuchsia-50 text-fuchsia-600 border-fuchsia-100 group-hover:bg-fuchsia-600 group-hover:text-white group-hover:border-fuchsia-600",
+        };
       default:
         return {
           bg: "bg-neutral-50 text-neutral-600 border-neutral-100 group-hover:bg-neutral-900 group-hover:text-white group-hover:border-neutral-950",
@@ -192,6 +208,12 @@ export default function App() {
     const handleLocationChange = () => {
       const path = window.location.pathname.replace(/^\//, "");
       // If valid slug fits, set it, else empty (home screen)
+      if (path === "premium") {
+        setCurrentSlug("");
+        window.history.replaceState(null, "", "/");
+        setIsPaywallOpen(true);
+        return;
+      }
       const exists = TOOLS.some(t => t.slug === path);
       if (exists) {
         setCurrentSlug(path);
@@ -265,105 +287,66 @@ export default function App() {
     return () => unsubscribe();
   }, [premiumUnlocked]);
 
-  // LOCAL STORAGE DAILY ATTEMPTS HANDLER
+  // BACKEND IP/ACCOUNT USAGE STATUS INITIALIZER
   useEffect(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
-    const rawUsage = localStorage.getItem("pdf_app_usage");
-    
-    if (rawUsage) {
+    const fetchUsageStatus = async () => {
       try {
-        const parsed = JSON.parse(rawUsage);
-        if (parsed.unlocked) {
-          setPremiumUnlocked(true);
-          setPremiumPlanName(parsed.plan || "Premium Pass");
+        const email = localStorage.getItem("user_email") || "";
+        const response = await fetch(`/api/usage/status?email=${encodeURIComponent(email)}`);
+        if (response.ok) {
+          const data = await response.json();
+          setUsageCount(data.count);
+          if (data.premiumUnlocked) {
+            setPremiumUnlocked(true);
+            setPremiumPlanName("Premium Pro");
+          }
         }
-        
-        if (parsed.date === todayStr) {
-          setUsageCount(parsed.count || 0);
-        } else {
-          // New day, reset counter
-          const initData = { date: todayStr, count: 0, unlocked: parsed.unlocked, plan: parsed.plan };
-          localStorage.setItem("pdf_app_usage", JSON.stringify(initData));
-          setUsageCount(0);
-        }
-      } catch (e) {
-        // Corrupt storage reset
-        const initData = { date: todayStr, count: 0, unlocked: false };
-        localStorage.setItem("pdf_app_usage", JSON.stringify(initData));
+      } catch (err) {
+        console.error("Failed to fetch initial usage status:", err);
       }
-    } else {
-      const initData = { date: todayStr, count: 0, unlocked: false };
-      localStorage.setItem("pdf_app_usage", JSON.stringify(initData));
-    }
-  }, []);
+    };
+    fetchUsageStatus();
+  }, [currentUserEmail]);
 
   // Check and increment attempt logic
-  const handleUsageIncrement = (): boolean => {
+  const handleUsageIncrement = async (): Promise<boolean> => {
     if (premiumUnlocked) return true; // unlimited access
 
-    const todayStr = new Date().toISOString().split("T")[0];
-    const rawUsage = localStorage.getItem("pdf_app_usage");
-    let currentData = { date: todayStr, count: 0, unlocked: false, plan: "" };
-
-    if (rawUsage) {
-      try {
-        const parsed = JSON.parse(rawUsage);
-        // Reset count if it's a new day
-        if (parsed.date === todayStr) {
-          currentData = parsed;
-        } else {
-          // New day — reset count
-          currentData = { date: todayStr, count: 0, unlocked: false, plan: "" };
-          localStorage.setItem("pdf_app_usage", JSON.stringify(currentData));
-        }
-      } catch (e) { }
-    }
-
-    const DAILY_LIMIT = 10; // 10 free uses per day
-
-    // Block if limit reached
-    if (currentData.count >= DAILY_LIMIT) {
-      setIsPaywallOpen(true);
-      return false; // blocked
-    }
-
-    // Increment
-    const updatedCount = currentData.count + 1;
-    currentData.count = updatedCount;
-    currentData.date = todayStr;
-    localStorage.setItem("pdf_app_usage", JSON.stringify(currentData));
-    setUsageCount(updatedCount);
-
-    // Show upgrade prompt after 8 uses but still allow the action
-    if (updatedCount >= 8) {
-      setTimeout(() => {
+    try {
+      const email = localStorage.getItem("user_email") || "";
+      const response = await fetch("/api/usage/increment", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+      if (!response.ok) {
+        throw new Error("Server limit check failed");
+      }
+      const data = await response.json();
+      setUsageCount(data.count);
+      if (!data.allowed) {
         setIsPaywallOpen(true);
-      }, 800);
+        return false; // blocked
+      }
+      return true; // allowed
+    } catch (err) {
+      console.error("Usage limit check error:", err);
+      setIsPaywallOpen(true);
+      return false;
     }
-
-    return true; // allowed
   };
 
   // Callback on successful checkout payment
-  const handlePaymentSuccessUnlock = (planId: string) => {
-    const todayStr = new Date().toISOString().split("T")[0];
-    const rawUsage = localStorage.getItem("pdf_app_usage");
-    let currentData = { date: todayStr, count: 0, unlocked: true, plan: planId };
-
-    if (rawUsage) {
-      try {
-        currentData = JSON.parse(rawUsage);
-      } catch (e) { }
-    }
-
+  const handlePaymentSuccessUnlock = async (planId: string) => {
     const planNameLabel = planId === "daily" ? "Daily Pass" : planId === "weekly" ? "Weekly Pass" : "Monthly Pro";
-    currentData.unlocked = true;
-    currentData.plan = planNameLabel;
-    localStorage.setItem("pdf_app_usage", JSON.stringify(currentData));
     
     setPremiumUnlocked(true);
     setPremiumPlanName(planNameLabel);
     setIsPaywallOpen(false);
+
+    const email = localStorage.getItem("user_email") || "";
 
     // Sync upgraded status to CRM and Supabase DB
     if (currentUserEmail) {
@@ -375,16 +358,34 @@ export default function App() {
       
       syncUserSession(name, cleanContact, "pro", isPhone ? "phone" : "email");
     }
+
+    // Unlock on backend IP usage store
+    try {
+      await fetch("/api/usage/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch (err) {
+      console.error("Failed to unlock backend usage:", err);
+    }
   };
 
   // Reset/Revoke Premium license for testing
-  const resetPremiumLicenseForDemo = () => {
-    const todayStr = new Date().toISOString().split("T")[0];
-    const initData = { date: todayStr, count: 0, unlocked: false };
-    localStorage.setItem("pdf_app_usage", JSON.stringify(initData));
+  const resetPremiumLicenseForDemo = async () => {
     setPremiumUnlocked(false);
     setPremiumPlanName("");
     setUsageCount(0);
+    const email = localStorage.getItem("user_email") || "";
+    try {
+      await fetch("/api/usage/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch (err) {
+      console.error("Failed to reset backend usage:", err);
+    }
   };
 
   // Find active tool
@@ -420,12 +421,7 @@ export default function App() {
 
            {/* User limit states / Auth status on far right */}
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsPaywallOpen(true)}
-              className="bg-black hover:bg-neutral-800 text-white px-4 py-2 rounded-lg text-sm transition-colors cursor-pointer font-bold"
-            >
-              Unlock Pro
-            </button>
+
 
             {currentUserEmail ? (
               <div className="flex items-center gap-3">
@@ -909,7 +905,7 @@ export default function App() {
           <div className="space-y-16" id="home_directory_view">
             
             {/* TWO-COLUMN SPLIT HERO SECTION */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center py-16 max-w-6xl mx-auto" id="split_hero_section">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-16 items-center py-24 md:py-28 max-w-6xl mx-auto" id="split_hero_section">
               {/* Left Column: Typography & Action */}
               <div className="text-left space-y-6">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-neutral-200 rounded-full text-xs font-mono text-neutral-600 shadow-3xs">
@@ -1028,51 +1024,203 @@ export default function App() {
             </div>
 
             {/* INTERACTIVE WORKSPACE MATRIX */}
-            <div id="tools_section" className="pt-8 scroll-mt-24">
-              <h2 className="text-2xl font-semibold text-neutral-900 mb-8">One Tool for Every PDF Need</h2>
+            <div id="tools_section" className="pt-8 scroll-mt-24 space-y-12">
               
-              {/* Dynamic Grid of all 8 core tools */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" id="tools_catalog_grid">
-                {TOOLS.map((item) => {
-                  const colors = getToolColorStyles(item.slug);
-                  return (
-                    <button
-                      key={item.slug}
-                      onClick={() => navigateToSlug(item.slug)}
-                      className="glass-panel border border-neutral-200/60 p-5 rounded-xl text-left group transition-all duration-200 hover:border-neutral-900 cursor-pointer flex flex-col justify-between h-44"
-                      id={`tool_card_${item.slug}`}
-                    >
-                      <div className="w-full">
-                        {/* Muted Pastel container around modern icon */}
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 transition-colors duration-200 border shrink-0 ${colors.bg}`}>
-                          {item.slug === "merge-pdf" && <Layers size={16} />}
-                          {item.slug === "split-pdf" && <Scissors size={16} />}
-                          {item.slug === "jpg-to-pdf" && <FileImage size={16} />}
-                          {item.slug === "pdf-to-jpg" && <FileText size={16} />}
-                          {item.slug === "delete-pdf-pages" && <Trash2 size={16} />}
-                          {item.slug === "rotate-pdf" && <RotateCw size={16} />}
-                          {item.slug === "compress-pdf" && <Minimize2 size={16} />}
-                          {item.slug === "protect-pdf" && <Shield size={16} />}
-                          {item.slug === "unlock-pdf" && <Lock size={16} />}
+              <div className="text-left space-y-3 mb-10 max-w-6xl mx-auto">
+                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-neutral-900">One Tool for Every PDF Need</h2>
+                <p className="text-neutral-500 text-sm sm:text-base max-w-2xl">
+                  Fast, secure, and reliable tools to edit, convert, and manage your documents in one click.
+                </p>
+              </div>
+
+              {/* HIGH PERFORMANCE TOOLS - SEPARATED & HIGHLIGHTED */}
+              <div className="space-y-6 max-w-6xl mx-auto">
+                <div className="flex items-center gap-3">
+                  <span className="h-px bg-neutral-200 flex-1" />
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-400 font-mono">
+                    High Performance Essentials
+                  </span>
+                  <span className="h-px bg-neutral-200 flex-1" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {TOOLS.slice(0, 4).map((item) => {
+                    const colors = getToolColorStyles(item.slug);
+                    return (
+                      <button
+                        key={item.slug}
+                        onClick={() => navigateToSlug(item.slug)}
+                        className="group relative flex flex-col justify-between h-[210px] p-6 rounded-2xl bg-white border border-neutral-300/70 shadow-xs transition-all duration-300 hover:-translate-y-1.5 hover:border-neutral-900 hover:shadow-md cursor-pointer text-left"
+                        id={`tool_card_${item.slug}`}
+                      >
+                        {/* High Performance badge */}
+                        <span className="absolute top-4 right-4 bg-amber-500/10 text-amber-700 border border-amber-500/20 text-[9px] font-bold uppercase tracking-wider font-mono px-2 py-0.5 rounded-md flex items-center gap-1 select-none z-10">
+                          <Sparkles size={9} /> High Usage
+                        </span>
+
+                        <div className="w-full">
+                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 transition-all duration-300 border ${colors.bg}`}>
+                            {item.slug === "merge-pdf" && <Layers size={20} />}
+                            {item.slug === "split-pdf" && <Scissors size={20} />}
+                            {item.slug === "jpg-to-pdf" && <FileImage size={20} />}
+                            {item.slug === "pdf-to-jpg" && <FileText size={20} />}
+                            {item.slug === "compress-pdf" && <Minimize2 size={20} />}
+                          </div>
+
+                          <h3 className="text-base font-bold text-neutral-900 flex items-center justify-between tracking-tight group-hover:text-black transition-colors leading-snug">
+                            {item.name}
+                          </h3>
+                          <p className="text-[13px] text-neutral-500 leading-relaxed mt-1.5 line-clamp-2 pr-12">
+                            {item.description}
+                          </p>
                         </div>
 
-                        <h3 className="text-sm font-bold text-neutral-900 flex items-center justify-between">
-                          {item.name}
-                          <ChevronRight size={13} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-200" />
-                        </h3>
-                        <p className="text-xs text-neutral-500 leading-normal mt-1 block">
-                          {item.description}
-                        </p>
-                      </div>
-
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 group-hover:text-neutral-900 font-mono mt-3 self-start">
-                        Launch Tool
-                      </span>
-                    </button>
-                  );
-                })}
+                        <div className="flex items-center justify-between mt-auto pt-4 w-full">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 group-hover:text-neutral-900 transition-colors font-mono">
+                            Launch Tool
+                          </span>
+                          <ChevronRight size={16} className="text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all duration-300" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              {/* ADDITIONAL TOOLS */}
+              <div className="space-y-6 max-w-6xl mx-auto pt-4">
+                <div className="flex items-center gap-3">
+                  <span className="h-px bg-neutral-200 flex-1" />
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-neutral-400 font-mono">
+                    Additional Utilities
+                  </span>
+                  <span className="h-px bg-neutral-200 flex-1" />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {TOOLS.slice(4).map((item) => {
+                    const colors = getToolColorStyles(item.slug);
+                    return (
+                      <button
+                        key={item.slug}
+                        onClick={() => navigateToSlug(item.slug)}
+                        className="group relative flex flex-col justify-between h-[210px] p-6 rounded-2xl bg-white border border-neutral-200/60 shadow-xs transition-all duration-300 hover:-translate-y-1.5 hover:border-neutral-900 hover:shadow-md cursor-pointer text-left"
+                        id={`tool_card_${item.slug}`}
+                      >
+                        <div className="w-full">
+                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 transition-all duration-300 border ${colors.bg}`}>
+                            {item.slug === "merge-pdf" && <Layers size={20} />}
+                            {item.slug === "split-pdf" && <Scissors size={20} />}
+                            {item.slug === "jpg-to-pdf" && <FileImage size={20} />}
+                            {item.slug === "pdf-to-jpg" && <FileText size={20} />}
+                            {item.slug === "compress-pdf" && <Minimize2 size={20} />}
+                            {item.slug === "pdf-to-word" && <FileText size={20} />}
+                            {item.slug === "word-to-pdf" && <FileText size={20} />}
+                            {item.slug === "delete-pdf-pages" && <Trash2 size={20} />}
+                            {item.slug === "edit-pdf" && <PenTool size={20} />}
+                            {item.slug === "rotate-pdf" && <RotateCw size={20} />}
+                            {item.slug === "unlock-pdf" && <Lock size={20} />}
+                            {item.slug === "protect-pdf" && <Shield size={20} />}
+                            {item.slug === "sign-pdf" && <FileSignature size={20} />}
+                          </div>
+
+                          <h3 className="text-base font-bold text-neutral-900 flex items-center justify-between tracking-tight group-hover:text-black transition-colors leading-snug">
+                            {item.name}
+                          </h3>
+                          <p className="text-[13px] text-neutral-500 leading-relaxed mt-1.5 line-clamp-2">
+                            {item.description}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between mt-auto pt-4 w-full">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 group-hover:text-neutral-900 transition-colors font-mono">
+                            Launch Tool
+                          </span>
+                          <ChevronRight size={16} className="text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-1 transition-all duration-300" />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
             </div>
+
+            {/* BRAND PREMIUM CALLOUT BANNER SECTION */}
+            <section className="border-t border-neutral-200/60 pt-16 max-w-6xl mx-auto w-full" id="premium_brand_callout_section">
+              <div className="bg-gradient-to-br from-slate-50 via-neutral-50 to-slate-100 border border-neutral-200/80 shadow-md rounded-[32px] p-8 sm:p-12 md:p-16 flex flex-col lg:flex-row items-center justify-between gap-12 relative overflow-hidden">
+                {/* Visual subtle accents */}
+                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-200/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-indigo-200/10 rounded-full blur-2xl pointer-events-none" />
+
+                {/* Left Side: Content & Action */}
+                <div className="flex-1 text-left space-y-6 max-w-xl">
+                  <span className="text-xs font-mono uppercase tracking-widest text-neutral-400 font-bold block">
+                    A Brief History of the Layout
+                  </span>
+                  
+                  <div className="space-y-3">
+                    <h3 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-900 leading-tight">
+                      Intact Across Every Screen
+                    </h3>
+                    <p className="text-xs sm:text-[13px] font-semibold text-neutral-500 uppercase tracking-wider font-mono">
+                      How the Portable Document Format became a quiet bridge between billions of devices.
+                    </p>
+                  </div>
+
+                  <p className="text-neutral-600 text-[13px] sm:text-sm leading-relaxed">
+                    First launched in 1993, the PDF was created to preserve fonts, vector layouts, and formatting exactly as intended—no matter the software or device. It became the universal standard for contracts, records, and templates. Unlock unlimited access to this format's full potential.
+                  </p>
+
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setIsPaywallOpen(true)}
+                      className="bg-neutral-950 hover:bg-black text-white font-bold text-sm tracking-wide py-3.5 px-16 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg cursor-pointer text-center w-64 inline-flex items-center justify-center gap-2"
+                    >
+                      Unlock Pro
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Side: Multi-layered Storyboard Parallax Illustration */}
+                <div className="w-full lg:w-[400px] shrink-0 flex items-center justify-center relative h-[320px] group/illustration select-none">
+                  {/* Layer 1: Background decorative glowing circles */}
+                  <div className="absolute w-72 h-72 bg-gradient-to-tr from-sky-200/40 to-indigo-200/30 rounded-full blur-2xl pointer-events-none transform transition-all duration-700 ease-out group-hover:scale-110 group-hover:translate-x-2 group-hover:-translate-y-2" />
+                  <div className="absolute w-48 h-48 bg-gradient-to-bl from-violet-200/20 to-emerald-200/30 rounded-full blur-xl pointer-events-none transform transition-all duration-700 ease-out group-hover:scale-125 group-hover:-translate-x-4 group-hover:translate-y-4" />
+
+                  {/* Layer 2: Character illustration (The main storyboard image) */}
+                  <div className="relative rounded-2xl overflow-hidden border border-neutral-200/60 shadow-lg bg-white p-2 w-[340px] transform transition-all duration-700 ease-out group-hover/illustration:-translate-y-1 group-hover/illustration:scale-[1.01] group-hover/illustration:rotate-[1deg] group-hover/illustration:shadow-xl">
+                    <img 
+                      src="/premium_illustration_indian.png" 
+                      alt="Student studying with PDF Easy" 
+                      className="w-full h-auto rounded-xl object-contain"
+                    />
+                  </div>
+
+                  {/* Layer 3: Floating Document conversion flow tree (parallax layer) */}
+                  <div className="absolute bottom-6 left-6 bg-white/90 backdrop-blur-md border border-neutral-200/80 p-4 rounded-xl shadow-lg w-[190px] transform transition-all duration-700 ease-out -rotate-[3deg] group-hover/illustration:-translate-y-4 group-hover/illustration:-translate-x-2 group-hover/illustration:rotate-[2deg] group-hover/illustration:shadow-xl pointer-events-none">
+                    <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-neutral-100">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 font-mono">Conversion Tree</span>
+                    </div>
+                    <div className="space-y-1.5 text-[11px] font-medium text-neutral-600">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate">📎 document.docx</span>
+                        <span className="text-emerald-500 font-bold">✓</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate">🖼️ raw_image.jpg</span>
+                        <span className="text-emerald-500 font-bold">✓</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-dashed border-neutral-200 font-bold text-neutral-900">
+                        <span className="truncate">📄 bundled.pdf</span>
+                        <span className="text-emerald-600">Generated</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
 
             {/* MINIMALIST SOCIAL PROOF / TRUST GRID SECTION */}
             <section className="border-t border-neutral-200/60 pt-16 max-w-6xl mx-auto" id="social_proof_trust_section">

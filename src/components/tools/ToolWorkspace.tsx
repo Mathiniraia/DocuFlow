@@ -387,7 +387,7 @@ export default function ToolWorkspace({
     console.log("[PDF Easy] localStorage usage:", localStorage.getItem("pdf_app_usage"));
 
     // 1. Guard check attempts counter in daily hook
-    const proceed = incrementUsage();
+    const proceed = await incrementUsage();
     console.log("[PDF Easy] incrementUsage() returned:", proceed);
     if (!proceed) {
       console.warn("[PDF Easy] BLOCKED by usage limit — paywall shown");
@@ -929,7 +929,30 @@ export default function ToolWorkspace({
           {/* Stage 1: Active Setup / Dropzone */}
           {stage === 1 && (
             <div>
-              {files.length === 0 ? (
+              {["pdf-to-word", "word-to-pdf", "edit-pdf", "sign-pdf"].includes(tool.slug) ? (
+                // COMING SOON WORKSPACE
+                <div className="flex flex-col items-center justify-center text-center py-12 px-6 max-w-md mx-auto space-y-6">
+                  <div className="w-16 h-16 bg-neutral-100 border border-neutral-200 rounded-full flex items-center justify-center text-neutral-500">
+                    <Sparkles size={28} className="text-neutral-500 animate-pulse" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-neutral-900">{tool.name}</h2>
+                    <p className="text-xs text-neutral-400 mt-2 tracking-wide uppercase font-mono bg-neutral-100 px-3 py-1 rounded-full inline-block">Coming Soon</p>
+                    <p className="text-sm text-neutral-500 mt-4 leading-relaxed">
+                      We are currently developing our new high-speed, local browser engine for <strong>{tool.name}</strong>. This feature will be available in the upcoming update.
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      window.history.pushState(null, "", "/");
+                      window.dispatchEvent(new PopStateEvent("popstate"));
+                    }}
+                    className="bg-neutral-900 hover:bg-neutral-800 text-white font-medium px-6 py-2 rounded-xl text-sm transition shadow-sm cursor-pointer"
+                  >
+                    Go Back to Dashboard
+                  </button>
+                </div>
+              ) : files.length === 0 ? (
                 // DROPZONE COMPONENT
                 <div className="flex flex-col items-center gap-6 w-full p-4">
                   <div className="text-center">

@@ -6,45 +6,12 @@
 import { ToolDefinition } from "./types";
 
 export const TOOLS: ToolDefinition[] = [
-  {
-    slug: "merge-pdf",
-    name: "Merge PDF",
-    description: "Combine multiple PDF documents into a single professional file instantly.",
-    iconName: "FileStack",
-    steps: [
-      { title: "Upload Files", desc: "Select and drag multiple PDF files into our workspace dropzone." },
-      { title: "Arrange Order", desc: "Drag and drop to rearrange files in the exact sequence you want them." },
-      { title: "Download Merged PDF", desc: "Click compile and download your combined document instantly with no quality loss." }
-    ],
-    faqs: [
-      { q: "Is there a limit on how many files I can merge?", a: "No, you can combine multiple files seamlessly for standard production layouts." },
-      { q: "Does merging PDFs compromise document security?", a: "No. Your documents are processed directly to maintain formatting and security standard controls." },
-      { q: "Will the merged file retain original table formatting and links?", a: "Yes, pdf-lib merges the files at the binary level, preserving all links, formatting, fonts, and annotations." }
-    ],
-    seoText: "Combine multiple files into one PDF seamlessly with our modern Merge PDF tool. Specially designed for students, legal professionals, and remote managers who value speed. Optimized for rapid workflow execution."
-  },
-  {
-    slug: "split-pdf",
-    name: "Split PDF",
-    description: "Extract specific individual pages or split sections from your PDF file within seconds.",
-    iconName: "Scissors",
-    steps: [
-      { title: "Upload PDF", desc: "Choose the target document you need to extract pages from." },
-      { title: "Specify Pages", desc: "Input page numbers/ranges (e.g., 1-3, 5) or click on pages to extract." },
-      { title: "Export Sections", desc: "Download the instantly created new PDF containing only your selected pages." }
-    ],
-    faqs: [
-      { q: "How do I specify which pages to extract?", a: "You can enter standard ranges like '1-3, 5' or select pages visually. The engine will instantly parse and extract those." },
-      { q: "Is split PDF quality as high as the original?", a: "Yes. It extracts original layout schemas without re-compressing individual objects, maintaining pristine professional quality." },
-      { q: "Does the utility platform store a copy of my split files?", a: "Absolutely not. The splitting is processed on demand securely to maintain standard isolation." }
-    ],
-    seoText: "Extract pages from your PDF files with high-precision splitting. Ideal for sending single reports, distributing specific chapters of ebooks, or extracting customized layouts for simple sharing."
-  },
+  // ================= TIER 1 =================
   {
     slug: "jpg-to-pdf",
     name: "JPG to PDF",
     description: "Convert sequences of JPG, JPEG, and PNG images into a clean single PDF file.",
-    iconName: "ImageInline",
+    iconName: "FileImage",
     steps: [
       { title: "Upload Gallery", desc: "Select or drop image sequence files (JPG/PNG) into the staging box." },
       { title: "Arrange and Format", desc: "Verify image order and orientations before compilation." },
@@ -75,38 +42,21 @@ export const TOOLS: ToolDefinition[] = [
     seoText: "Convert PDF pages to JPG images in seconds. Render each vector layout flat into individual graphics, which are perfect for social shares, web content embedding, or offline graphic editing."
   },
   {
-    slug: "delete-pdf-pages",
-    name: "Delete PDF Pages",
-    description: "Visually select, search, and remove unneeded pages from any PDF document.",
-    iconName: "Trash2",
+    slug: "merge-pdf",
+    name: "Merge PDF",
+    description: "Combine multiple PDF documents into a single professional file instantly.",
+    iconName: "Layers",
     steps: [
-      { title: "Drop PDF", desc: "Select and preview your document structure cleanly in the canvas." },
-      { title: "Toggle Pages", desc: "Click on pages you wish to delete to mark them for removal." },
-      { title: "Apply & Export", desc: "Regenerate the filtered document and download the cleaned version." }
+      { title: "Upload Files", desc: "Select and drag multiple PDF files into our workspace dropzone." },
+      { title: "Arrange Order", desc: "Drag and drop to rearrange files in the exact sequence you want them." },
+      { title: "Download Merged PDF", desc: "Click compile and download your combined document instantly with no quality loss." }
     ],
     faqs: [
-      { q: "Can I undo selecting pages for deletion?", a: "Yes! Simply click the page thumbnail again to unmark it before exporting." },
-      { q: "How many pages can I delete at once?", a: "As many as you want, provided you leave at least one page so a valid PDF can still be saved." },
-      { q: "Does deleting pages reduce file size?", a: "Yes, the file size will shrink proportionally to the removed pages and their associated visual elements." }
+      { q: "Is there a limit on how many files I can merge?", a: "No, you can combine multiple files seamlessly for standard production layouts." },
+      { q: "Does merging PDFs compromise document security?", a: "No. Your documents are processed directly to maintain formatting and security standard controls." },
+      { q: "Will the merged file retain original table formatting and links?", a: "Yes, pdf-lib merges the files at the binary level, preserving all links, formatting, fonts, and annotations." }
     ],
-    seoText: "Quickly delete pages from PDF files with our convenient interactive preview panel. Clean up draft comments, hide internal documents before sharing, or cull redundant blank indices instantly."
-  },
-  {
-    slug: "rotate-pdf",
-    name: "Rotate PDF Pages",
-    description: "Orient individual pages or the entire document by 90, 180, or 270 degrees.",
-    iconName: "Undo",
-    steps: [
-      { title: "Add Pages", desc: "Load the skewed PDF documents into the workspace." },
-      { title: "Rotate Controls", desc: "Click the rotate action buttons to spin individual pages or all pages at once." },
-      { title: "Save Setup", desc: "Apply rotation attributes locally and secure the perfect visual orientation." }
-    ],
-    faqs: [
-      { q: "Can I rotate only horizontal landscape pages?", a: "Yes. You can rotate individual page thumbnails selectively or process the entire document at once." },
-      { q: "Will the rotation change the original quality?", a: "No. The orientation metadata angle itself is updated at root binary layers without rasterizing contents." },
-      { q: "Can I rotate pages multiple times?", a: "Yes. Each rotation click shifts the page 90 degrees clockwise. You can repeat to reach 180, 270, or 360 degrees." }
-    ],
-    seoText: "Straighten up scanned documents, sideways templates, and mismatched orientation receipts in your browser with our smart metadata transformation tool. Perfect alignment, zero delay."
+    seoText: "Combine multiple files into one PDF seamlessly with our modern Merge PDF tool. Specially designed for students, legal professionals, and remote managers who value speed. Optimized for rapid workflow execution."
   },
   {
     slug: "compress-pdf",
@@ -124,6 +74,131 @@ export const TOOLS: ToolDefinition[] = [
       { q: "Are files uploaded to servers for processing?", a: "No, compression is carried out automatically using optimized rendering presets." }
     ],
     seoText: "Shrink high-density file footprints instantly using smart compression algorithms. Perfect for email attachments, online forms uploads, and archive indexing."
+  },
+
+  // ================= TIER 2 =================
+  {
+    slug: "pdf-to-word",
+    name: "PDF to Word",
+    description: "Convert PDF documents to editable Microsoft Word files seamlessly.",
+    iconName: "FileText",
+    steps: [
+      { title: "Upload PDF", desc: "Select or drop the PDF file you need to convert." },
+      { title: "Convert to DOCX", desc: "Our engine parses pages and matches formatting structure." },
+      { title: "Save Word File", desc: "Download your newly created, fully editable Word document." }
+    ],
+    faqs: [
+      { q: "Will the converted Word document keep the original formatting?", a: "Yes, our layout matching system attempts to preserve text placement, tables, and images." },
+      { q: "Can I convert scanned PDFs to Word?", a: "Scanned PDFs will be rendered as images in the Word file, but you can edit them directly." },
+      { q: "Is this tool free?", a: "Yes, it is part of our standard toolkit with standard daily limits." }
+    ],
+    seoText: "Convert PDF to Word document files online easily. Retain fonts, paragraphs, lists, and tables for editing."
+  },
+  {
+    slug: "word-to-pdf",
+    name: "Word to PDF",
+    description: "Convert Microsoft Word documents into clean, standard PDF files.",
+    iconName: "FileText",
+    steps: [
+      { title: "Upload Word File", desc: "Select or drop the DOC or DOCX file to undergo conversion." },
+      { title: "Compile to PDF", desc: "Convert document layouts to universal standard PDF formatting." },
+      { title: "Save PDF", desc: "Download the converted and ready-to-share standard PDF document." }
+    ],
+    faqs: [
+      { q: "Which formats are supported?", a: "We support both standard .doc and .docx Microsoft Word documents." },
+      { q: "Will my custom fonts be embedded?", a: "Yes, we attempt to preserve standard system fonts and embed layout properties directly." },
+      { q: "How long does conversion take?", a: "The layout conversion runs instantly inside your modern workspace." }
+    ],
+    seoText: "Convert Word DOCX files to PDF online. Quick, secure conversion preserving tables, alignment, and graphics."
+  },
+  {
+    slug: "split-pdf",
+    name: "Split PDF",
+    description: "Extract specific individual pages or split sections from your PDF file within seconds.",
+    iconName: "Scissors",
+    steps: [
+      { title: "Upload PDF", desc: "Choose the target document you need to extract pages from." },
+      { title: "Specify Pages", desc: "Input page numbers/ranges (e.g., 1-3, 5) or click on pages to extract." },
+      { title: "Export Sections", desc: "Download the instantly created new PDF containing only your selected pages." }
+    ],
+    faqs: [
+      { q: "How do I specify which pages to extract?", a: "You can enter standard ranges like '1-3, 5' or select pages visually. The engine will instantly parse and extract those." },
+      { q: "Is split PDF quality as high as the original?", a: "Yes. It extracts original layout schemas without re-compressing individual objects, maintaining pristine professional quality." },
+      { q: "Does the utility platform store a copy of my split files?", a: "Absolutely not. The splitting is processed on demand securely to maintain standard isolation." }
+    ],
+    seoText: "Extract pages from your PDF files with high-precision splitting. Ideal for sending single reports, distributing specific chapters of ebooks, or extracting customized layouts for simple sharing."
+  },
+
+  // ================= TIER 3 =================
+  {
+    slug: "delete-pdf-pages",
+    name: "Delete PDF Pages",
+    description: "Visually select, search, and remove unneeded pages from any PDF document.",
+    iconName: "Trash2",
+    steps: [
+      { title: "Drop PDF", desc: "Select and preview your document structure cleanly in the canvas." },
+      { title: "Toggle Pages", desc: "Click on pages you wish to delete to mark them for removal." },
+      { title: "Apply & Export", desc: "Regenerate the filtered document and download the cleaned version." }
+    ],
+    faqs: [
+      { q: "Can I undo selecting pages for deletion?", a: "Yes! Simply click the page thumbnail again to unmark it before exporting." },
+      { q: "How many pages can I delete at once?", a: "As many as you want, provided you leave at least one page so a valid PDF can still be saved." },
+      { q: "Does deleting pages reduce file size?", a: "Yes, the file size will shrink proportionally to the removed pages and their associated visual elements." }
+    ],
+    seoText: "Quickly delete pages from PDF files with our convenient interactive preview panel. Clean up draft comments, hide internal documents before sharing, or cull redundant blank indices instantly."
+  },
+  {
+    slug: "edit-pdf",
+    name: "Edit PDF",
+    description: "Edit text, images, and layout elements directly inside your PDF.",
+    iconName: "PenTool",
+    steps: [
+      { title: "Add Document", desc: "Upload the PDF file you wish to modify." },
+      { title: "Make Edits", desc: "Use our interactive editor to add text, insert graphics, or change items." },
+      { title: "Export PDF", desc: "Apply changes and download your newly edited PDF document." }
+    ],
+    faqs: [
+      { q: "Can I edit existing text inside a PDF?", a: "Yes, you can edit text boxes, change fonts, and adjust alignment easily." },
+      { q: "Can I add custom drawings or shapes?", a: "Yes, the edit board supports standard highlight shapes, pencil marks, and notes." },
+      { q: "Is the output file watermark-free?", a: "Yes, PDF Easy doesn't add any promotional watermarks to your custom edited files." }
+    ],
+    seoText: "Edit PDF files online with our complete workspace. Add text annotations, highlight fields, insert signs, and adjust pages."
+  },
+  {
+    slug: "rotate-pdf",
+    name: "Rotate PDF Pages",
+    description: "Orient individual pages or the entire document by 90, 180, or 270 degrees.",
+    iconName: "RotateCw",
+    steps: [
+      { title: "Add Pages", desc: "Load the skewed PDF documents into the workspace." },
+      { title: "Rotate Controls", desc: "Click the rotate action buttons to spin individual pages or all pages at once." },
+      { title: "Save Setup", desc: "Apply rotation attributes locally and secure the perfect visual orientation." }
+    ],
+    faqs: [
+      { q: "Can I rotate only horizontal landscape pages?", a: "Yes. You can rotate individual page thumbnails selectively or process the entire document at once." },
+      { q: "Will the rotation change the original quality?", a: "No. The orientation metadata angle itself is updated at root binary layers without rasterizing contents." },
+      { q: "Can I rotate pages multiple times?", a: "Yes. Each rotation click shifts the page 90 degrees clockwise. You can repeat to reach 180, 270, or 360 degrees." }
+    ],
+    seoText: "Straighten up scanned documents, sideways templates, and mismatched orientation receipts in your browser with our smart metadata transformation tool. Perfect alignment, zero delay."
+  },
+
+  // ================= TIER 4 =================
+  {
+    slug: "unlock-pdf",
+    name: "Unlock PDF / Remove Password",
+    description: "Create a decrypted PDF copy after entering the correct password.",
+    iconName: "Lock",
+    steps: [
+      { title: "Select Protected PDF", desc: "Choose the password-secured PDF you want to open." },
+      { title: "Enter Password", desc: "Type the correct password for this file." },
+      { title: "Download Unlocked Copy", desc: "Save a copy that opens without the original password." }
+    ],
+    faqs: [
+      { q: "Can I unlock a PDF if I do not know the password?", a: "No. You must enter the correct password to create an unlocked copy." },
+      { q: "Is the unlocked file fully unencrypted?", a: "Yes. The exported copy opens without password prompts." },
+      { q: "Does PDF Easy keep my password?", a: "No. The password is used locally in your browser and is not stored or sent anywhere." }
+    ],
+    seoText: "Create unlocked PDF copies after entering the correct password. Perfect for preparing statements and records for easy sharing."
   },
   {
     slug: "protect-pdf",
@@ -143,20 +218,20 @@ export const TOOLS: ToolDefinition[] = [
     seoText: "Create password-protected PDF copies directly in your browser. Ideal for legal, corporate, and official documents."
   },
   {
-    slug: "unlock-pdf",
-    name: "Unlock PDF / Remove Password",
-    description: "Create a decrypted PDF copy after entering the correct password.",
-    iconName: "Lock",
+    slug: "sign-pdf",
+    name: "Sign PDF",
+    description: "Draw, type, or upload digital signatures and place them securely on your PDF.",
+    iconName: "FileSignature",
     steps: [
-      { title: "Select Protected PDF", desc: "Choose the password-secured PDF you want to open." },
-      { title: "Enter Password", desc: "Type the correct password for this file." },
-      { title: "Download Unlocked Copy", desc: "Save a copy that opens without the original password." }
+      { title: "Select PDF", desc: "Upload the contract, agreement, or form that requires signing." },
+      { title: "Create Signature", desc: "Draw with your mouse/trackpad, type your name, or upload an image." },
+      { title: "Place & Save", desc: "Position your signature on any page, apply, and download the signed PDF." }
     ],
     faqs: [
-      { q: "Can I unlock a PDF if I do not know the password?", a: "No. You must enter the correct password to create an unlocked copy." },
-      { q: "Is the unlocked file fully unencrypted?", a: "Yes. The exported copy opens without password prompts." },
-      { q: "Does PDF Easy keep my password?", a: "No. The password is used locally in your browser and is not stored or sent anywhere." }
+      { q: "Is this signature legally binding?", a: "Yes, our eSign tool complies with standard electronic signature regulations for general agreements." },
+      { q: "Can I add multiple signatures to one PDF?", a: "Yes, you can place multiple signature blocks across different pages as needed." },
+      { q: "Is my signature kept secure?", a: "Absolutely. Your signature data is processed entirely locally and never stored on any remote disk." }
     ],
-    seoText: "Create unlocked PDF copies after entering the correct password. Perfect for preparing statements and records for easy sharing."
+    seoText: "Sign PDF contracts and agreements online. Fill out forms, place electronic signatures, and securely finalize paperwork from any device."
   }
 ];

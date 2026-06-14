@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import path from "path";
+import fs from "fs";
 import cors from "cors";
 import { createServer as createViteServer } from "vite";
 import Razorpay from "razorpay";
@@ -199,6 +200,105 @@ app.post("/api/crm/sync-user", async (req, res) => {
   }
 });
 
+
+// ================= PERSISTENT IP/ACCOUNT USAGE LIMITS =================
+const USAGE_FILE = path.join(process.cwd(), "ip_usage.json");
+let ipUsageStore: Record<string, { count: number; unlocked: boolean }> = {};
+
+if (fs.existsSync(USAGE_FILE)) {
+  try {
+    ipUsageStore = JSON.parse(fs.readFileSync(USAGE_FILE, "utf-8"));
+  } catch (e) {
+    ipUsageStore = {};
+  }
+}
+
+function saveUsage() {
+  try {
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(ipUsageStore, null, 2));
+  } catch (e) {
+    console.error("Failed to save usage file:", e);
+  }
+}
+
+function getUsageKey(req: express.Request, email?: string): string {
+  if (email && email.trim() !== "") {
+    return `email:${email.trim().toLowerCase()}`;
+  }
+  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || req.ip;
+  const ipStr = Array.isArray(ip) ? ip[0] : ip || "127.0.0.1";
+  return `ip:${ipStr.trim()}`;
+}
+
+app.get("/api/usage/status", (req, res) => {
+  const email = req.query.email as string | undefined;
+  const key = getUsageKey(req, email);
+  
+  if (!ipUsageStore[key]) {
+    ipUsageStore[key] = { count: 0, unlocked: false };
+    saveUsage();
+  }
+  
+  res.json({
+    count: ipUsageStore[key].count,
+    premiumUnlocked: ipUsageStore[key].unlocked
+  });
+});
+
+app.post("/api/usage/increment", (req, res) => {
+  const { email } = req.body;
+  const key = getUsageKey(req, email);
+
+  if (!ipUsageStore[key]) {
+    ipUsageStore[key] = { count: 0, unlocked: false };
+  }
+
+  // If already premium, let them proceed
+  if (ipUsageStore[key].unlocked) {
+    return res.json({ allowed: true, count: ipUsageStore[key].count });
+  }
+
+  const LIMIT = 3; // 3 free uses
+
+  if (ipUsageStore[key].count >= LIMIT) {
+    return res.json({ allowed: false, count: ipUsageStore[key].count });
+  }
+
+  ipUsageStore[key].count += 1;
+  saveUsage();
+
+  res.json({ allowed: true, count: ipUsageStore[key].count });
+});
+
+app.post("/api/usage/unlock", (req, res) => {
+  const { email } = req.body;
+  
+  // Unlock by both IP and email (to be robust)
+  const emailKey = getUsageKey(req, email);
+  if (!ipUsageStore[emailKey]) ipUsageStore[emailKey] = { count: 0, unlocked: true };
+  ipUsageStore[emailKey].unlocked = true;
+
+  const ipKey = getUsageKey(req, undefined);
+  if (!ipUsageStore[ipKey]) ipUsageStore[ipKey] = { count: 0, unlocked: true };
+  ipUsageStore[ipKey].unlocked = true;
+
+  saveUsage();
+  res.json({ success: true });
+});
+
+app.post("/api/usage/reset", (req, res) => {
+  const { email } = req.body;
+  const emailKey = getUsageKey(req, email);
+  if (ipUsageStore[emailKey]) {
+    ipUsageStore[emailKey] = { count: 0, unlocked: false };
+  }
+  const ipKey = getUsageKey(req, undefined);
+  if (ipUsageStore[ipKey]) {
+    ipUsageStore[ipKey] = { count: 0, unlocked: false };
+  }
+  saveUsage();
+  res.json({ success: true });
+});
 
 
 // Configure Vite middleware in development or express.static in production
