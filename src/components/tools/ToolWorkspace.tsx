@@ -17,6 +17,9 @@ import { jsPDF } from "jspdf";
 import { encryptPDF } from "@pdfsmaller/pdf-encrypt";
 import { decryptPDF, isEncrypted as checkIsEncrypted } from "@pdfsmaller/pdf-decrypt";
 import * as pdfjsLib from "pdfjs-dist";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 export default function ToolWorkspace({
   tool,
@@ -62,6 +65,7 @@ export default function ToolWorkspace({
   const [pdfPreviews, setPdfPreviews] = useState<string[]>([]);
   const [isGeneratingPreviews, setIsGeneratingPreviews] = useState(false);
   const [isEncrypted, setIsEncrypted] = useState(false);
+  const [pdfAlreadyEncrypted, setPdfAlreadyEncrypted] = useState(false);
 
   // ── AI Summarization States ──────────────────────────────────────────────
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
@@ -98,6 +102,7 @@ export default function ToolWorkspace({
     setPdfPreviews([]);
     setIsGeneratingPreviews(false);
     setIsEncrypted(false);
+    setPdfAlreadyEncrypted(false);
     // Reset AI states
     setAiPanelOpen(false);
     setAiSummary("");
@@ -193,6 +198,16 @@ export default function ToolWorkspace({
         }
 
         setIsEncrypted(fileIsLocked);
+
+        if (!isJpgToPdf && tool.slug === "protect-pdf") {
+          try {
+            const encInfo = await checkIsEncrypted(bytes);
+            setPdfAlreadyEncrypted(encInfo.encrypted);
+          } catch {
+            setPdfAlreadyEncrypted(fileIsLocked);
+          }
+        }
+
         validFiles.push(fileInfo);
       }
 
@@ -242,8 +257,7 @@ export default function ToolWorkspace({
   const generatePreviews = async (pdfDocBytes: Uint8Array, userPassword?: string): Promise<string[]> => {
     try {
       setPdfPreviews([]);
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
-      
+
       const loadingTask = pdfjsLib.getDocument({ 
         data: pdfDocBytes,
         password: userPassword
@@ -379,8 +393,14 @@ export default function ToolWorkspace({
     });
   };
 
+  const syncPasswordRefs = () => {
+    passwordRef.current = password;
+    existingPasswordRef.current = existingPassword;
+  };
+
   // CORE CLIENT-SIDE HEAVY LIFTING METRIC PROCESSOR
   const executePDFAction = async () => {
+    syncPasswordRefs();
     console.log("[PDF Easy] executePDFAction called, tool:", tool.slug);
     console.log("[PDF Easy] passwordRef.current:", passwordRef.current ? `"${passwordRef.current}" (${passwordRef.current.length} chars)` : "EMPTY");
     console.log("[PDF Easy] files:", files.length, files[0]?.name);
@@ -477,7 +497,18 @@ export default function ToolWorkspace({
     const f = files[0];
     if (!f || !f.pdfBytes) throw new Error("Please add your document");
 
-    const pdfDoc = await PDFDocument.load(f.pdfBytes, { password: password || undefined, ignoreEncryption: !password } as any);
+    const splitPassword = passwordRef.current.trim() || password.trim();
+    let sourceBytes = f.pdfBytes;
+
+    const encInfo = await checkIsEncrypted(sourceBytes);
+    if (encInfo.encrypted) {
+      if (!splitPassword) {
+        throw new Error("This PDF is password-protected. Enter the password first.");
+      }
+      sourceBytes = await decryptPDF(sourceBytes, splitPassword);
+    }
+
+    const pdfDoc = await PDFDocument.load(sourceBytes);
     const count = pdfDoc.getPageCount();
 
     // Use selected split list or range
@@ -661,8 +692,7 @@ export default function ToolWorkspace({
     const jpegQuality = compressionMode === "extreme" ? 0.45 : 0.72;
 
     // Render each page to canvas then re-encode as JPEG to genuinely reduce size
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs`;
-    const loadingTask = pdfjsLib.getDocument({ data: f.pdfBytes });
+    const loadingTask = pdfjsLib.getDocument({ data: f.pdfBytes, password: password || undefined });
     const pdfJsDoc = await loadingTask.promise;
     const numPages = pdfJsDoc.numPages;
 
@@ -709,29 +739,21 @@ export default function ToolWorkspace({
   const doProtectPDF = async () => {
     const f = files[0];
     if (!f || !f.pdfBytes) throw new Error("No PDF loaded");
-    if (!password || password.trim().length === 0) {
+
+    const capturedPassword = passwordRef.current.trim();
+    const capturedExisting = existingPasswordRef.current.trim();
+
+    if (!capturedPassword) {
       throw new Error("Password encryption key has not been entered.");
-    }
-    const capturedPassword = passwordRef.current;
-    const capturedExisting = existingPasswordRef.current;
-
-    let activePreviews = pdfPreviews;
-    if (activePreviews.length === 0) {
-      await generatePreviews(f.pdfBytes);
-      activePreviews = pdfPreviews;
-    }
-
-    if (activePreviews.length === 0) {
-      throw new Error("Unable to render document pages for secure encryption.");
     }
 
     let workingBytes = f.pdfBytes;
 
     // If PDF is already encrypted, decrypt it first so we can re-encrypt with new password
-    const alreadyEncrypted = await checkIsEncrypted(workingBytes);
-    console.log("[Protect] PDF already encrypted:", alreadyEncrypted);
+    const encInfo = await checkIsEncrypted(workingBytes);
+    console.log("[Protect] PDF already encrypted:", encInfo.encrypted);
 
-    if (alreadyEncrypted) {
+    if (encInfo.encrypted) {
       if (!capturedExisting) {
         throw new Error(
           "This PDF is already password-protected. Enter its current password in the \"Existing password\" field."
@@ -748,7 +770,7 @@ export default function ToolWorkspace({
     // Encrypt with the new password (AES-256 standard)
     const ownerPassword = `${capturedPassword}_owner_${Date.now()}`;
     console.log("[Protect] Encrypting with new password...");
-    const encryptedBytes = await encryptPDF(workingBytes, capturedPassword, { ownerPassword: `${capturedPassword}_owner_${Date.now()}` });
+    const encryptedBytes = await encryptPDF(workingBytes, capturedPassword, { ownerPassword });
     console.log("[Protect] Encryption done. Output size:", encryptedBytes.length);
 
     const finalBlob = new Blob([encryptedBytes], { type: "application/pdf" });
@@ -784,9 +806,9 @@ export default function ToolWorkspace({
     }
 
     // Check if it's actually encrypted
-    const encrypted = await checkIsEncrypted(f.pdfBytes);
-    console.log("[Unlock] Is encrypted:", encrypted);
-    if (!encrypted) {
+    const encInfo = await checkIsEncrypted(f.pdfBytes);
+    console.log("[Unlock] Is encrypted:", encInfo.encrypted);
+    if (!encInfo.encrypted) {
       throw new Error("This PDF is not password-protected — no unlock needed.");
     }
 
@@ -1005,7 +1027,7 @@ export default function ToolWorkspace({
               ) : (
                 // ACTIVE WORKSPACE INTERACTION INTERFACES BASED ON SLUG
                 <div>
-                  {isEncrypted ? (
+                  {isEncrypted && !["protect-pdf", "unlock-pdf"].includes(tool.slug) ? (
                     <div className="max-w-md mx-auto p-6 bg-white border border-neutral-200 rounded-xl space-y-4 shadow-xs text-center my-4" id="global_auth_encryption_block">
                       <div className="w-12 h-12 bg-amber-50 border border-amber-200 rounded-full flex items-center justify-center mx-auto text-amber-600">
                         <Lock size={22} className="animate-pulse" />
@@ -1405,23 +1427,52 @@ export default function ToolWorkspace({
                               <span className="text-xs font-semibold text-neutral-800 truncate max-w-xs">{files[0].name}</span>
                             </div>
                             <p className="text-[10px] text-neutral-400 mt-1">This uses localized stream encryption to scramble elements securely.</p>
+                            {pdfAlreadyEncrypted && (
+                              <p className="text-[10px] text-amber-700 mt-2 flex items-center gap-1 font-sans">
+                                <AlertTriangle size={11} /> This file is already protected. Enter its current password before setting a new one.
+                              </p>
+                            )}
                           </div>
-                          <div>
-                            <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">Enter standard password string:</label>
-                            <div className="relative">
-                              <input 
-                                type="password" 
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter secure lock key..."
-                                className="w-full text-xs bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-neutral-900 font-mono"
-                                id="password_input_protect"
-                              />
-                              <Lock size={14} className="absolute left-3 top-2.5 text-neutral-400" />
+                          <div className="space-y-3">
+                            {pdfAlreadyEncrypted && (
+                              <div>
+                                <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">Existing password:</label>
+                                <div className="relative">
+                                  <input
+                                    type="password"
+                                    value={existingPassword}
+                                    onChange={(e) => {
+                                      existingPasswordRef.current = e.target.value;
+                                      setExistingPassword(e.target.value);
+                                    }}
+                                    placeholder="Current document password..."
+                                    className="w-full text-xs bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-neutral-900 font-mono"
+                                    id="password_input_protect_existing"
+                                  />
+                                  <Lock size={14} className="absolute left-3 top-2.5 text-neutral-400" />
+                                </div>
+                              </div>
+                            )}
+                            <div>
+                              <label className="block text-xs text-neutral-500 mb-1 font-medium font-sans">New password:</label>
+                              <div className="relative">
+                                <input 
+                                  type="password" 
+                                  value={password}
+                                  onChange={(e) => {
+                                    passwordRef.current = e.target.value;
+                                    setPassword(e.target.value);
+                                  }}
+                                  placeholder="Enter secure lock key..."
+                                  className="w-full text-xs bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-neutral-900 font-mono"
+                                  id="password_input_protect"
+                                />
+                                <Lock size={14} className="absolute left-3 top-2.5 text-neutral-400" />
+                              </div>
+                              <p className="text-[9px] text-amber-600 mt-1.5 flex items-center gap-1 font-sans">
+                                <AlertTriangle size={11} /> Keep a note of it. Passwords cannot be retrieved due to high-security offline design.
+                              </p>
                             </div>
-                            <p className="text-[9px] text-amber-600 mt-1.5 flex items-center gap-1 font-sans">
-                              <AlertTriangle size={11} /> Keep a note of it. Passwords cannot be retrieved due to high-security offline design.
-                            </p>
                           </div>
                         </div>
                       </div>
@@ -1446,10 +1497,18 @@ export default function ToolWorkspace({
                               <input 
                                 type="password" 
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={(e) => {
+                                  passwordRef.current = e.target.value;
+                                  setPassword(e.target.value);
+                                }}
                                 placeholder="Decrypt password..."
                                 className="w-full text-xs bg-white border border-neutral-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-neutral-900 font-mono"
                                 id="password_input_unlock"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    executePDFAction();
+                                  }
+                                }}
                               />
                               <Lock size={14} className="absolute left-3 top-2.5 text-neutral-400" />
                             </div>
