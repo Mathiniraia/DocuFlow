@@ -871,8 +871,8 @@ export default function PaywallModal({
                     onClick={() => { setSelectedPlan(plan); setShowSandboxUI(false); }}
                     className={`w-full p-4 rounded-xl text-left flex items-center justify-between transition-all duration-150 border-2 ${
                       isSelected
-                        ? "bg-white border-neutral-900 shadow-md ring-1 ring-neutral-900"
-                        : "bg-white border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
+                        ? "bg-white border-neutral-900"
+                        : "bg-white border-neutral-200 hover:border-neutral-400"
                     } cursor-pointer`}
                     id={`plan_tile_${plan.id}`}
                   >
