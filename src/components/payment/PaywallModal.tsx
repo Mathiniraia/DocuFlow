@@ -871,7 +871,7 @@ export default function PaywallModal({
                     onClick={() => { setSelectedPlan(plan); setShowSandboxUI(false); }}
                     className={`w-full p-4 rounded-xl text-left flex items-center justify-between transition-all duration-150 border-2 ${
                       isSelected
-                        ? "bg-neutral-950 border-neutral-900 shadow-lg"
+                        ? "bg-white border-neutral-900 shadow-md ring-1 ring-neutral-900"
                         : "bg-white border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50"
                     } cursor-pointer`}
                     id={`plan_tile_${plan.id}`}
@@ -880,22 +880,22 @@ export default function PaywallModal({
                     <div className="flex items-center gap-3">
                       {/* Radio dot */}
                       <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                        isSelected ? "border-white bg-white" : "border-neutral-300"
+                        isSelected ? "border-neutral-900 bg-neutral-900" : "border-neutral-300"
                       }`}>
-                        {isSelected && <span className="block w-1.5 h-1.5 rounded-full bg-neutral-900" />}
+                        {isSelected && <span className="block w-1.5 h-1.5 rounded-full bg-white" />}
                       </div>
 
                       <div>
                         <div className="flex items-center gap-2">
                           <PlanIcon id={plan.id} />
-                          <span className={`font-extrabold text-sm ${ isSelected ? "text-white" : "text-neutral-900"}`}>{plan.name}</span>
+                          <span className="font-extrabold text-sm text-neutral-900">{plan.name}</span>
                           {plan.popular && (
                             <span className="text-[9px] bg-emerald-500 text-white font-bold uppercase tracking-wide px-1.5 py-0.5 rounded">
                               Popular
                             </span>
                           )}
                         </div>
-                        <span className={`text-[11px] mt-0.5 block ${ isSelected ? "text-neutral-400" : "text-neutral-400"}`}>{plan.period}</span>
+                        <span className="text-[11px] text-neutral-400 mt-0.5 block">{plan.period}</span>
                       </div>
                     </div>
 
@@ -903,26 +903,21 @@ export default function PaywallModal({
                     <div className="text-right shrink-0 ml-3 flex flex-col items-end gap-1">
                       {/* Discount badge */}
                       {plan.discount && (
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                          isSelected
-                            ? "bg-emerald-400 text-neutral-900"
-                            : "bg-emerald-100 text-emerald-700"
-                        }`}>
+                        <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
                           {plan.discount}
                         </span>
                       )}
                       {/* Strike price */}
-                      <span className={`text-[10px] line-through ${ isSelected ? "text-neutral-500" : "text-neutral-400"}`}>₹{plan.originalPrice}</span>
-                      {/* Final price — HIGHLIGHTED */}
-                      <span className={`text-2xl font-black font-mono leading-none ${
-                        isSelected ? "text-white" : "text-neutral-900"
-                      }`}>
+                      <span className="text-[10px] text-neutral-400 line-through">₹{plan.originalPrice}</span>
+                      {/* Final price — highlighted */}
+                      <span className="text-2xl font-black font-mono leading-none text-neutral-900">
                         ₹{plan.price}
                       </span>
                     </div>
                   </button>
                 );
               })}
+
             </div>
 
             {/* Selection details */}
