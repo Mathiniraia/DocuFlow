@@ -618,23 +618,15 @@ app.post("/api/usage/increment", async (req, res) => {
       });
   }
 
-  // Sync tool usage to CRM tool analytics
+  // Sync tool usage to CRM tool analytics — insert one row per use
   const { toolSlug } = req.body;
   if (toolSlug) {
     supabase
       .from("crm_tool_analytics")
-      .select("count")
-      .eq("tool_slug", toolSlug)
-      .single()
-      .then(({ data }) => {
-        const newCount = (data?.count || 0) + 1;
-        supabase
-          .from("crm_tool_analytics")
-          .upsert({ tool_slug: toolSlug, count: newCount }, { onConflict: "tool_slug" })
-          .then(({ error }) => {
-            if (error) console.warn("[CRM Tool Analytics] sync warning:", error.message);
-            else console.log(`[CRM Tool Analytics] ${toolSlug} → ${newCount} uses`);
-          });
+      .insert({ tool_slug: toolSlug })
+      .then(({ error }) => {
+        if (error) console.warn("[CRM Tool Analytics] sync warning:", error.message);
+        else console.log(`[CRM Tool Analytics] ${toolSlug} used`);
       });
   }
 
@@ -775,19 +767,25 @@ app.post("/api/admin/grant-access", async (req, res) => {
         else console.log(`[CRM Sync] Admin granted '${planId}' to ${email} until ${new Date(expiresAt).toISOString()}`);
       });
 
-    // Log admin grant as a transaction
+    // Log admin grant as a transaction (using actual crm_transactions schema)
+    const planTypeMap: Record<string,string> = {
+      starter:"starter", monthly:"monthly", annual:"annual", lifetime:"monthly",
+      daily:"daily", weekly:"weekly"
+    };
     supabase.from("crm_transactions").insert({
-      id: crypto.randomUUID(),
       user_id: null,
       user_name: email,
       razorpay_payment_id: `admin_grant_${Date.now()}`,
-      plan_type: `${planLabel} (Admin Grant)`,
+      razorpay_order_id: `admin_order_${Date.now()}`,
+      plan_type: planTypeMap[planId] || "monthly",
       amount: 0,
+      amount_in_paise: 0,
+      expires_at: new Date(expiresAt).toISOString(),
       plan_expires_at: new Date(expiresAt).toISOString(),
       status: "admin_grant",
-      created_at: new Date().toISOString(),
     }).then(({ error }) => {
       if (error) console.warn("[CRM] Admin grant transaction insert warning:", error.message);
+      else console.log(`[CRM] Admin grant logged for ${email}`);
     });
   }
 
@@ -945,10 +943,10 @@ app.get("/api/admin/transactions", async (req, res) => {
       razorpayPaymentId: tx.razorpay_payment_id || "—",
       userName:          tx.user_name || "Unknown",
       passType:          tx.plan_type || "Unknown Plan",
-      amount:            tx.amount || 0,
+      amount:            tx.amount || Math.round((tx.amount_in_paise || 0) / 100),
       timestamp:         tx.created_at,
       status:            tx.status || "captured",
-      planExpiresAt:     tx.plan_expires_at || null,
+      planExpiresAt:     tx.expires_at || tx.plan_expires_at || null,
     }));
 
     res.json({ transactions, total: transactions.length });
@@ -957,22 +955,27 @@ app.get("/api/admin/transactions", async (req, res) => {
   }
 });
 
-// GET /api/admin/tool-analytics — fetch tool usage counts from Supabase
+// GET /api/admin/tool-analytics — count rows per tool_slug from Supabase
 app.get("/api/admin/tool-analytics", async (req, res) => {
   if (!isAdminRequest(req)) return res.status(403).json({ error: "Unauthorized." });
   try {
+    // crm_tool_analytics is per-event (one row per use)
+    // Count rows grouped by tool_slug
     const { data, error } = await supabase
       .from("crm_tool_analytics")
-      .select("*")
-      .order("count", { ascending: false });
+      .select("tool_slug");
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const tools = (data || []).map((t: any) => ({
-      slug:  t.tool_slug,
-      title: t.tool_name || t.tool_slug,
-      count: t.count || 0,
-    }));
+    // Aggregate counts client-side
+    const counts: Record<string, number> = {};
+    for (const row of (data || [])) {
+      if (row.tool_slug) counts[row.tool_slug] = (counts[row.tool_slug] || 0) + 1;
+    }
+
+    const tools = Object.entries(counts)
+      .map(([slug, count]) => ({ slug, title: slug, count }))
+      .sort((a, b) => b.count - a.count);
 
     res.json({ tools, total: tools.length });
   } catch (err: any) {
