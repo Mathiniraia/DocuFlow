@@ -7,10 +7,10 @@ import React, { useState, useEffect } from "react";
 import { 
   X, Check, Sparkles, ShieldCheck, Loader2,
   Lock, Info, RefreshCw, Mail, Eye, EyeOff,
-  Clock, Calendar, Zap, Chrome
+  Clock, Calendar, Zap, Chrome, Phone
 } from "lucide-react";
 import { PaymentPlan } from "../../types";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { auth, googleProvider } from "../../firebase";
 
 interface PaywallModalProps {
@@ -69,7 +69,7 @@ const PLANS: PaymentPlan[] = [
   },
 ];
 
-type ModalStep = "plans" | "signin" | "email-signin" | "checkout" | "success";
+type ModalStep = "plans" | "signin" | "email-signin" | "phone-signin" | "checkout" | "success";
 
 function formatExpiry(ms: number): string {
   const now = Date.now();
@@ -103,6 +103,12 @@ export default function PaywallModal({
   const [passwordInput, setPasswordInput] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+
+  // Phone OTP Sign-In fields
+  const [phoneNumberInput, setPhoneNumberInput] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [otpSent, setOtpSent] = useState(false);
 
   // Sandbox
   const [showSandboxUI, setShowSandboxUI] = useState(false);
@@ -170,6 +176,99 @@ export default function PaywallModal({
     localStorage.setItem("user_email", emailInput);
     onUserSignedIn(emailInput);
     setStep("checkout");
+  };
+
+  // ─── Phone OTP Sign-In/Up ────────────────────────────────────────────────
+  const initRecaptcha = () => {
+    if (!(window as any).recaptchaVerifier) {
+      try {
+        (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+          size: "invisible",
+          callback: () => {
+            // reCAPTCHA solved
+          },
+          "expired-callback": () => {
+            if ((window as any).recaptchaVerifier) {
+              (window as any).recaptchaVerifier.clear();
+              (window as any).recaptchaVerifier = null;
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Recaptcha initialization failed", err);
+      }
+    }
+  };
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setLoading(true);
+
+    if (!phoneNumberInput.startsWith("+")) {
+      setErrorMessage("Phone number must include country code (e.g. +91XXXXXXXXXX)");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      initRecaptcha();
+      const appVerifier = (window as any).recaptchaVerifier;
+      if (!appVerifier) {
+        throw new Error("reCAPTCHA could not be initialized.");
+      }
+      
+      const confirmation = await signInWithPhoneNumber(auth, phoneNumberInput, appVerifier);
+      setConfirmationResult(confirmation);
+      setOtpSent(true);
+    } catch (err: any) {
+      console.error("Send OTP Error:", err);
+      setErrorMessage(err.message || "Failed to send OTP SMS. Please try again.");
+      if ((window as any).recaptchaVerifier) {
+        try {
+          (window as any).recaptchaVerifier.clear();
+        } catch {}
+        (window as any).recaptchaVerifier = null;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage("");
+    setLoading(true);
+
+    if (!confirmationResult) {
+      setErrorMessage("Session expired. Please try sending OTP again.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const result = await confirmationResult.confirm(verificationCode);
+      const user = result.user;
+      const finalEmail = user.phoneNumber || "phone-user";
+      
+      localStorage.setItem("user_email", finalEmail);
+      onUserSignedIn(finalEmail);
+      
+      try {
+        await fetch("/api/crm/sync-user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: finalEmail, planExpiresAt: null }),
+        });
+      } catch {}
+
+      setStep("checkout");
+    } catch (err: any) {
+      console.error("Verify OTP Error:", err);
+      setErrorMessage("Invalid verification code. Please check and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ─── Checkout ────────────────────────────────────────────────────────────
@@ -383,12 +482,129 @@ export default function PaywallModal({
                 Continue with Email
               </button>
 
+              {/* Phone OTP Sign-In */}
+              <button
+                onClick={() => {
+                  setStep("phone-signin");
+                  setOtpSent(false);
+                  setPhoneNumberInput("");
+                  setVerificationCode("");
+                  setConfirmationResult(null);
+                  setErrorMessage("");
+                }}
+                className="w-full flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl border border-neutral-200 hover:border-neutral-400 hover:bg-neutral-50 transition text-sm font-semibold text-neutral-800 cursor-pointer"
+                id="phone_signin_btn"
+              >
+                <Phone size={16} className="text-neutral-500" />
+                Continue with Phone
+              </button>
+
               <button
                 type="button"
                 onClick={() => setStep("plans")}
                 className="w-full text-xs text-neutral-500 hover:text-neutral-800 transition text-center pt-2 font-medium"
               >
                 ← Back to plan selection
+              </button>
+            </div>
+          </div>
+
+        /* ── PHONE OTP AUTH STEP ──────────────────────────────────────────── */
+        ) : step === "phone-signin" ? (
+          <div id="phone_auth_panel">
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-neutral-100">
+              <div>
+                <h2 className="text-base font-bold text-neutral-900">
+                  {!otpSent ? "Verify Mobile Number" : "Enter Verification Code"}
+                </h2>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  {!otpSent ? "We will send a 6-digit OTP via SMS" : `OTP sent to ${phoneNumberInput}`}
+                </p>
+              </div>
+              <button onClick={onClose} className="p-1.5 rounded-full hover:bg-neutral-100 text-neutral-400 hover:text-black transition">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {/* Invisible recaptcha container */}
+              <div id="recaptcha-container"></div>
+
+              {errorMessage && (
+                <div className="mb-4 p-3 text-xs bg-red-50 border border-red-200 text-red-600 rounded-lg flex items-center gap-2">
+                  <Info size={13} className="shrink-0" /> {errorMessage}
+                </div>
+              )}
+
+              {!otpSent ? (
+                <form onSubmit={handleSendOtp} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5 font-sans">Phone Number (with country code)</label>
+                    <input
+                      type="tel"
+                      value={phoneNumberInput}
+                      onChange={(e) => setPhoneNumberInput(e.target.value)}
+                      placeholder="+919876543210"
+                      className="w-full text-sm border border-neutral-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-neutral-800 focus:ring-2 focus:ring-neutral-100 transition-all font-mono"
+                      id="phone_auth_input"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full flex items-center justify-center py-3 rounded-xl bg-neutral-900 text-white text-sm font-semibold hover:bg-black transition shadow-sm cursor-pointer disabled:opacity-50"
+                    id="phone_send_otp_btn"
+                  >
+                    {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
+                    Send OTP Verification SMS
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleVerifyOtp} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-600 mb-1.5 font-sans">Verification Code</label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value)}
+                      placeholder="123456"
+                      className="w-full text-center text-lg tracking-widest font-mono border border-neutral-200 rounded-xl px-4 py-2.5 focus:outline-none focus:border-neutral-800 focus:ring-2 focus:ring-neutral-100 transition-all"
+                      id="phone_otp_code_input"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full flex items-center justify-center py-3 rounded-xl bg-neutral-900 text-white text-sm font-semibold hover:bg-black transition shadow-sm cursor-pointer disabled:opacity-50"
+                    id="phone_verify_otp_btn"
+                  >
+                    {loading ? <Loader2 size={16} className="animate-spin mr-2" /> : null}
+                    Verify & Proceed
+                  </button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setOtpSent(false)}
+                      className="text-xs text-neutral-500 hover:text-neutral-950 font-medium hover:underline"
+                    >
+                      Change phone number
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setStep("signin")}
+                className="w-full text-xs text-neutral-400 hover:text-neutral-600 transition text-center mt-4"
+              >
+                ← Back to sign-in options
               </button>
             </div>
           </div>
