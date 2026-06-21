@@ -13,7 +13,7 @@ import {
   Mail, Clock, Crown, Ban, Zap, Search, CheckCircle,
   XCircle, IndianRupee, Activity, ChevronDown, TrendingUp,
   Calendar, Eye, EyeOff, Lock, FileText, LayoutDashboard,
-  MousePointerClick, AlertCircle, ArrowUpRight, Phone,
+  MousePointerClick, AlertCircle, ArrowUpRight, Phone, Download
 } from "lucide-react";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -351,6 +351,58 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
   const [acting, setActing]    = useState<string|null>(null);
   const [toasts, setToasts]    = useState<{id:number;ok:boolean;msg:string}[]>([]);
   const [planFilter, setPlanFilter] = useState<"all"|"premium"|"free"|"revoked">("all");
+  const [dateFilter, setDateFilter] = useState<string>("all-time");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
+
+  const exportToCSV = () => {
+    if (filteredUsers.length === 0) return;
+    const headers = ["ID", "Name", "Email", "Phone", "Plan Status", "Usage Count", "Premium Active", "Expires At", "Joined At", "Is Admin"];
+    const rows = filteredUsers.map(u => [
+      u.id,
+      `"${(u.displayName || "").replace(/"/g, '""')}"`,
+      `"${(u.email || "").replace(/"/g, '""')}"`,
+      `"${(u.phone || "").replace(/"/g, '""')}"`,
+      u.planStatus,
+      u.usageCount.toString(),
+      u.premiumActive ? "Yes" : "No",
+      u.expiresAt ? new Date(u.expiresAt).toISOString() : "",
+      new Date(u.joinedAt).toISOString(),
+      u.isAdmin ? "Yes" : "No"
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `pdfeasy_users_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportPaymentsToCSV = () => {
+    if (filteredTxns.length === 0) return;
+    const headers = ["ID", "Razorpay Payment ID", "Customer Email", "Plan Purchased", "Amount", "Status", "Date & Time"];
+    const rows = filteredTxns.map(tx => [
+      tx.id,
+      tx.razorpayPaymentId || "",
+      `"${(tx.userName || "").replace(/"/g, '""')}"`,
+      tx.passType,
+      tx.amount.toString(),
+      tx.status,
+      new Date(tx.timestamp).toISOString()
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `pdfeasy_payments_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   // Manual grant form
   const [manualEmail, setManualEmail] = useState("");
@@ -429,8 +481,7 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
   const freeUsers     = users.filter(u => !u.premiumActive).length;
   const revokedUsers  = users.filter(u => u.accessRevoked).length;
   const adminGranted  = users.filter(u => u.grantedByAdmin).length;
-  const totalRevenue  = txns.filter(t => t.status === "captured").reduce((s,t) => s+t.amount, 0);
-  const totalTxns     = txns.filter(t => t.status === "captured").length;
+  // Stats dynamically derived from filteredTxns are now computed below
   const maxTool       = tools.length ? Math.max(...tools.map(t => t.count), 1) : 1;
   const totalToolUses = tools.reduce((s, t) => s + t.count, 0);
 
@@ -442,8 +493,60 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
     if (planFilter === "premium") matchPlan = u.premiumActive && !u.accessRevoked;
     if (planFilter === "free")    matchPlan = !u.premiumActive;
     if (planFilter === "revoked") matchPlan = u.accessRevoked;
-    return matchSearch && matchPlan;
+
+    let matchDate = true;
+    if (dateFilter !== "all-time") {
+      const joined = new Date(u.joinedAt).getTime();
+      const now = Date.now();
+      const diffDays = (now - joined) / (1000 * 60 * 60 * 24);
+      if (dateFilter === "last-24h" && diffDays > 1) matchDate = false;
+      if (dateFilter === "last-7d" && diffDays > 7) matchDate = false;
+      if (dateFilter === "last-30d" && diffDays > 30) matchDate = false;
+      if (dateFilter === "last-calendar-month") {
+        const lastMonthDate = new Date();
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const isSameMonthAndYear = new Date(joined).getMonth() === lastMonthDate.getMonth() && new Date(joined).getFullYear() === lastMonthDate.getFullYear();
+        if (!isSameMonthAndYear) matchDate = false;
+      }
+      if (dateFilter === "last-quarter" && diffDays > 90) matchDate = false;
+      if (dateFilter === "last-year" && diffDays > 365) matchDate = false;
+      if (dateFilter === "custom") {
+        if (customStartDate && joined < new Date(customStartDate).getTime()) matchDate = false;
+        if (customEndDate && joined > new Date(customEndDate).getTime() + 86400000) matchDate = false;
+      }
+    }
+
+    return matchSearch && matchPlan && matchDate;
   });
+
+  // Filtered txns
+  const filteredTxns = txns.filter(tx => {
+    let matchDate = true;
+    if (dateFilter !== "all-time") {
+      const ts = new Date(tx.timestamp).getTime();
+      const now = Date.now();
+      const diffDays = (now - ts) / (1000 * 60 * 60 * 24);
+      if (dateFilter === "last-24h" && diffDays > 1) matchDate = false;
+      if (dateFilter === "last-7d" && diffDays > 7) matchDate = false;
+      if (dateFilter === "last-30d" && diffDays > 30) matchDate = false;
+      if (dateFilter === "last-calendar-month") {
+        const lastMonthDate = new Date();
+        lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+        const isSameMonthAndYear = new Date(ts).getMonth() === lastMonthDate.getMonth() && new Date(ts).getFullYear() === lastMonthDate.getFullYear();
+        if (!isSameMonthAndYear) matchDate = false;
+      }
+      if (dateFilter === "last-quarter" && diffDays > 90) matchDate = false;
+      if (dateFilter === "last-year" && diffDays > 365) matchDate = false;
+      if (dateFilter === "custom") {
+        if (customStartDate && ts < new Date(customStartDate).getTime()) matchDate = false;
+        if (customEndDate && ts > new Date(customEndDate).getTime() + 86400000) matchDate = false;
+      }
+    }
+    return matchDate;
+  });
+
+  const totalRevenue  = filteredTxns.filter(t => t.status === "captured").reduce((s,t) => s+t.amount, 0);
+  const totalTxnsCount = filteredTxns.filter(t => t.status === "captured").length;
 
   // Most recent signups
   const recentUsers = [...users].sort((a,b) => new Date(b.joinedAt).getTime()-new Date(a.joinedAt).getTime()).slice(0,5);
@@ -452,8 +555,8 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
 
   const TABS = [
     { id:"overview",  label:"Overview",  icon:<LayoutDashboard size={13}/> },
-    { id:"users",     label:`Users (${totalUsers})`, icon:<Users size={13}/> },
-    { id:"payments",  label:`Payments (${totalTxns})`, icon:<CreditCard size={13}/> },
+    { id:"users",     label:`Users (${filteredUsers.length})`, icon:<Users size={13}/> },
+    { id:"payments",  label:`Payments (${totalTxnsCount})`, icon:<CreditCard size={13}/> },
     { id:"tools",     label:`Tool Usage`, icon:<BarChart3 size={13}/> },
     { id:"activity",  label:"Activity",  icon:<MousePointerClick size={13}/> },
   ] as const;
@@ -531,7 +634,7 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
               <StatCard icon={<Users size={18}/>} label="Total Users" value={totalUsers}
                 sub={`${premiumUsers} premium`} accent="bg-violet-50 text-violet-600 border border-violet-200" />
               <StatCard icon={<IndianRupee size={18}/>} label="Total Revenue" value={`₹${totalRevenue.toLocaleString("en-IN")}`}
-                sub={`${totalTxns} payments`} accent="bg-emerald-50 text-emerald-600 border border-emerald-200" />
+                sub={`${totalTxnsCount} payments`} accent="bg-emerald-50 text-emerald-600 border border-emerald-200" />
               <StatCard icon={<Activity size={18}/>} label="Tool Uses" value={totalToolUses}
                 sub={topTool ? `Top: ${TOOL_NAMES[topTool.slug]||topTool.slug}` : "No data"} accent="bg-blue-50 text-blue-600 border border-blue-200" />
               <StatCard icon={<Zap size={18}/>} label="Admin Grants" value={adminGranted}
@@ -669,22 +772,55 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
           <div className="space-y-3">
 
             {/* Search + Filter */}
-            <div className="flex flex-wrap gap-3">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-400" />
-                <input type="text" placeholder="Search by name or email..." value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 text-sm border border-neutral-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10" />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-neutral-400" />
+                  <input type="text" placeholder="Search by name or email..." value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 text-sm border border-neutral-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10" />
+                </div>
+                <div className="flex items-center gap-2 bg-white border border-neutral-200 rounded-xl p-1">
+                  {(["all","premium","free","revoked"] as const).map(f => (
+                    <button key={f} onClick={() => setPlanFilter(f)}
+                      className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition cursor-pointer capitalize ${
+                        planFilter === f ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-700"
+                      }`}>
+                      {f}
+                    </button>
+                  ))}
+                </div>
+                <div className="relative border border-neutral-200 rounded-xl bg-white px-3 py-2 flex items-center gap-2">
+                   <Calendar size={12} className="text-neutral-400" />
+                   <select 
+                     value={dateFilter} 
+                     onChange={(e) => setDateFilter(e.target.value)}
+                     className="text-[11px] font-bold text-neutral-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider"
+                   >
+                     <option value="all-time">All Time</option>
+                     <option value="last-24h">Last 24 Hours</option>
+                     <option value="last-7d">Last 7 Days</option>
+                     <option value="last-30d">Last 30 Days</option>
+                     <option value="last-calendar-month">Last Month</option>
+                     <option value="last-quarter">Last 90 Days</option>
+                     <option value="last-year">Last Year</option>
+                     <option value="custom">Custom Date Range</option>
+                   </select>
+                </div>
+                {dateFilter === "custom" && (
+                  <div className="flex items-center gap-2 border border-neutral-200 rounded-xl bg-white px-3 py-1.5">
+                    <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="text-[11px] font-bold text-neutral-700 outline-none" />
+                    <span className="text-[10px] text-neutral-400">to</span>
+                    <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="text-[11px] font-bold text-neutral-700 outline-none" />
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                {(["all","premium","free","revoked"] as const).map(f => (
-                  <button key={f} onClick={() => setPlanFilter(f)}
-                    className={`px-3 py-2 text-[11px] font-bold rounded-lg border transition cursor-pointer capitalize ${
-                      planFilter === f ? "bg-neutral-900 text-white border-neutral-900" : "bg-white text-neutral-500 border-neutral-200 hover:border-neutral-400"
-                    }`}>
-                    {f === "all" ? `All (${totalUsers})` : f === "premium" ? `Premium (${premiumUsers})` : f === "free" ? `Free (${freeUsers})` : `Revoked (${revokedUsers})`}
-                  </button>
-                ))}
+              
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Export Data</span>
+                <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 border-2 border-emerald-500 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer text-xs font-bold uppercase tracking-wider">
+                   <Download size={14} /> Download CSV File
+                </button>
               </div>
             </div>
 
@@ -845,20 +981,56 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
         {/* ── PAYMENTS TAB ─────────────────────────────────────────────────── */}
         {tab === "payments" && (
           <div className="space-y-3">
+            {/* Filter + Export Row */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="relative border border-neutral-200 rounded-xl bg-white px-3 py-2 flex items-center gap-2">
+                   <Calendar size={12} className="text-neutral-400" />
+                   <select 
+                     value={dateFilter} 
+                     onChange={(e) => setDateFilter(e.target.value)}
+                     className="text-[11px] font-bold text-neutral-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider"
+                   >
+                     <option value="all-time">All Time</option>
+                     <option value="last-24h">Last 24 Hours</option>
+                     <option value="last-7d">Last 7 Days</option>
+                     <option value="last-30d">Last 30 Days</option>
+                     <option value="last-calendar-month">Last Month</option>
+                     <option value="last-quarter">Last 90 Days</option>
+                     <option value="last-year">Last Year</option>
+                     <option value="custom">Custom Date Range</option>
+                   </select>
+                </div>
+                {dateFilter === "custom" && (
+                  <div className="flex items-center gap-2 border border-neutral-200 rounded-xl bg-white px-3 py-1.5">
+                    <input type="date" value={customStartDate} onChange={e => setCustomStartDate(e.target.value)} className="text-[11px] font-bold text-neutral-700 outline-none" />
+                    <span className="text-[10px] text-neutral-400">to</span>
+                    <input type="date" value={customEndDate} onChange={e => setCustomEndDate(e.target.value)} className="text-[11px] font-bold text-neutral-700 outline-none" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-[9px] font-bold text-neutral-400 uppercase tracking-wider">Export Data</span>
+                <button onClick={exportPaymentsToCSV} className="flex items-center gap-2 px-4 py-2 border-2 border-emerald-500 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition cursor-pointer text-xs font-bold uppercase tracking-wider">
+                   <Download size={14} /> Download CSV File
+                </button>
+              </div>
+            </div>
+
             {/* Revenue summary */}
             <div className="grid grid-cols-3 gap-4">
               <StatCard icon={<IndianRupee size={16}/>} label="Total Revenue" value={`₹${totalRevenue.toLocaleString("en-IN")}`}
-                sub={`${totalTxns} captured`} accent="bg-emerald-50 text-emerald-600 border border-emerald-200" />
-              <StatCard icon={<CheckCircle size={16}/>} label="Captured" value={totalTxns}
+                sub={`${totalTxnsCount} captured`} accent="bg-emerald-50 text-emerald-600 border border-emerald-200" />
+              <StatCard icon={<CheckCircle size={16}/>} label="Captured" value={totalTxnsCount}
                 accent="bg-blue-50 text-blue-600 border border-blue-200" />
-              <StatCard icon={<AlertCircle size={16}/>} label="Failed" value={txns.filter(t=>t.status==="failed").length}
+              <StatCard icon={<AlertCircle size={16}/>} label="Failed" value={filteredTxns.filter(t=>t.status==="failed").length}
                 accent="bg-red-50 text-red-500 border border-red-200" />
             </div>
 
             <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
               {loading ? (
                 <div className="flex items-center justify-center py-16"><RefreshCw size={22} className="animate-spin text-neutral-300"/></div>
-              ) : txns.length === 0 ? (
+              ) : filteredTxns.length === 0 ? (
                 <div className="text-center py-16">
                   <CreditCard size={32} className="mx-auto mb-3 text-neutral-200"/>
                   <p className="text-sm font-medium text-neutral-500">No payments yet</p>
@@ -879,7 +1051,7 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-neutral-50 text-xs">
-                        {txns.map(tx => (
+                        {filteredTxns.map(tx => (
                           <tr key={tx.id} className="hover:bg-neutral-50/50 transition-colors">
                             <td className="px-5 py-3.5 font-mono text-[10px] text-neutral-400">{tx.razorpayPaymentId}</td>
                             <td className="px-5 py-3.5 font-bold text-neutral-800">{tx.userName}</td>
