@@ -1249,7 +1249,9 @@ app.get("/api/admin/crm-users", async (req, res) => {
         planStatus: livePlan,
         usageCount: liveCount,
         premiumActive: isPremium,
-        expiresAt: expiresAt > 0 ? new Date(expiresAt).toISOString() : (u.plan_expires_at || null),
+        expiresAt: expiresAt > 0 
+          ? (expiresAt === Infinity ? new Date(9999999999999).toISOString() : new Date(expiresAt).toISOString()) 
+          : (u.plan_expires_at || null),
         joinedAt: u.created_at,
         isAdmin: email ? isAdminEmail(email) : false,
         grantedByAdmin: u.granted_by_admin || false,
