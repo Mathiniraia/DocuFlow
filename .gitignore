@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 ip_usage.json
+admin_cred.json
