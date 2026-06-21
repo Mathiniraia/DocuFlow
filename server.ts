@@ -651,6 +651,7 @@ function getUsageKey(req: express.Request, email?: string): string {
 
 app.get("/api/usage/status", async (req, res) => {
   const email = req.query.email as string | undefined;
+  const localUsage = parseInt((req.query.local_usage as string) || "0", 10);
 
   // ── Admin whitelist: permanent lifetime access ──
   if (email && isAdminEmail(email)) {
@@ -669,6 +670,12 @@ app.get("/api/usage/status", async (req, res) => {
 
   if (!ipUsageStore[ipKey]) ipUsageStore[ipKey] = { count: 0, unlockedUntil: 0, planName: "free" };
   if (emailKey && !ipUsageStore[emailKey]) ipUsageStore[emailKey] = { count: 0, unlockedUntil: 0, planName: "free" };
+
+  // Sync client-side localStorage count (survives logouts and cold starts)
+  ipUsageStore[ipKey].count = Math.max(ipUsageStore[ipKey].count, localUsage);
+  if (emailKey) {
+    ipUsageStore[emailKey].count = Math.max(ipUsageStore[emailKey].count, localUsage);
+  }
 
   const key = emailKey || ipKey;
 
@@ -727,7 +734,8 @@ app.get("/api/usage/status", async (req, res) => {
 });
 
 app.post("/api/usage/increment", async (req, res) => {
-  const { email } = req.body;
+  const { email, local_usage } = req.body;
+  const localUsage = parseInt(local_usage || "0", 10);
 
   // Sync tool usage to CRM tool analytics — insert one row per use
   const { toolSlug } = req.body;
@@ -746,6 +754,12 @@ app.post("/api/usage/increment", async (req, res) => {
 
   if (!ipUsageStore[ipKey]) ipUsageStore[ipKey] = { count: 0, unlockedUntil: 0, planName: "free" };
   if (emailKey && !ipUsageStore[emailKey]) ipUsageStore[emailKey] = { count: 0, unlockedUntil: 0, planName: "free" };
+
+  // Sync client-side localStorage count
+  ipUsageStore[ipKey].count = Math.max(ipUsageStore[ipKey].count, localUsage);
+  if (emailKey) {
+    ipUsageStore[emailKey].count = Math.max(ipUsageStore[emailKey].count, localUsage);
+  }
 
   const key = emailKey || ipKey;
 

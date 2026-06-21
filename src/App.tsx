@@ -452,10 +452,12 @@ export default function App() {
     const fetchUsageStatus = async () => {
       try {
         const email = localStorage.getItem("user_email") || "";
-        const response = await fetch(`/api/usage/status?email=${encodeURIComponent(email)}`);
+        const localUsage = localStorage.getItem("free_usage_count") || "0";
+        const response = await fetch(`/api/usage/status?email=${encodeURIComponent(email)}&local_usage=${localUsage}`);
         if (response.ok) {
           const data = await response.json();
           setUsageCount(data.count);
+          localStorage.setItem("free_usage_count", data.count.toString());
           if (data.premiumUnlocked && data.planExpiresAt) {
             // Verify expiry client-side too
             if (data.planExpiresAt > Date.now()) {
@@ -499,18 +501,20 @@ export default function App() {
   const handleUsageIncrement = async (): Promise<boolean> => {
     try {
       const email = localStorage.getItem("user_email") || "";
+      const localUsage = localStorage.getItem("free_usage_count") || "0";
       const response = await fetch("/api/usage/increment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, toolSlug: currentSlug || "" }),
+        body: JSON.stringify({ email, toolSlug: currentSlug || "", local_usage: localUsage }),
       });
       if (!response.ok) {
         throw new Error("Server limit check failed");
       }
       const data = await response.json();
       setUsageCount(data.count);
+      localStorage.setItem("free_usage_count", data.count.toString());
       
       if (premiumUnlocked) return true; // unlimited access
 
