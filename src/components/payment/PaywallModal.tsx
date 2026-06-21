@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   X, Check, Sparkles, ShieldCheck, Loader2,
   Lock, Info, RefreshCw, Mail, Eye, EyeOff,
@@ -123,6 +123,7 @@ export default function PaywallModal({
   const [successExpiry, setSuccessExpiry] = useState<number | null>(null);
   const [successPlanName, setSuccessPlanName] = useState("");
   const [shaking, setShaking] = useState(false);
+  const [autoCheckout, setAutoCheckout] = useState(false);
 
   const triggerShake = () => {
     setShaking(true);
@@ -135,8 +136,10 @@ export default function PaywallModal({
     }
   };
 
+  const prevIsOpen = useRef(isOpen);
+
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevIsOpen.current) {
       if (planExpiresAt && planExpiresAt > Date.now()) {
         setStep("active_subscription");
       } else {
@@ -145,6 +148,7 @@ export default function PaywallModal({
       setErrorMessage("");
       setShowSandboxUI(false);
     }
+    prevIsOpen.current = isOpen;
   }, [isOpen, usageLimitReached, planExpiresAt]);
 
   useEffect(() => {
@@ -154,6 +158,14 @@ export default function PaywallModal({
     document.body.appendChild(script);
     return () => { document.body.removeChild(script); };
   }, []);
+
+  // Auto-initiate checkout if the user just signed in and was directed to checkout
+  useEffect(() => {
+    if (step === "checkout" && autoCheckout && currentUserEmail) {
+      setAutoCheckout(false);
+      handleCheckoutInitiation();
+    }
+  }, [step, autoCheckout, currentUserEmail]);
 
   if (!isOpen) return null;
 
@@ -177,6 +189,7 @@ export default function PaywallModal({
 
       onUserSignedIn(email);
       setStep("checkout");
+      setAutoCheckout(true);
     } catch (err: any) {
       setErrorMessage("Google sign-in failed. Please try again.");
     } finally {
@@ -204,6 +217,7 @@ export default function PaywallModal({
     localStorage.setItem("user_email", emailInput);
     onUserSignedIn(emailInput);
     setStep("checkout");
+    setAutoCheckout(true);
   };
 
   // ─── Phone OTP Sign-In/Up ────────────────────────────────────────────────
@@ -291,6 +305,7 @@ export default function PaywallModal({
       } catch {}
 
       setStep("checkout");
+      setAutoCheckout(true);
     } catch (err: any) {
       console.error("Verify OTP Error:", err);
       setErrorMessage("Invalid verification code. Please check and try again.");

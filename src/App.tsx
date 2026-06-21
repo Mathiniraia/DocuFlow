@@ -366,6 +366,27 @@ export default function App() {
     })();
   }, [currentSlug]);
 
+  // Dynamic SEO Meta Tags
+  useEffect(() => {
+    const activeTool = TOOLS.find(t => t.slug === currentSlug);
+    if (activeTool) {
+      document.title = `${activeTool.name} - Free Online PDF Tool | PDF Easy`;
+      let metaDesc = document.querySelector('meta[name="description"]');
+      if (!metaDesc) {
+        metaDesc = document.createElement('meta');
+        metaDesc.setAttribute('name', 'description');
+        document.head.appendChild(metaDesc);
+      }
+      metaDesc.setAttribute('content', activeTool.seoText);
+    } else {
+      document.title = "PDF Easy - Your Complete PDF Workspace";
+      let metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) {
+        metaDesc.setAttribute('content', "Powerful PDF tools designed to help you work faster, stay organized, and get more done. Optimize, convert, and organize your files quickly and reliably.");
+      }
+    }
+  }, [currentSlug]);
+
   // FIREBASE AUTH STATE LIFECYCLE HANDLER
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {

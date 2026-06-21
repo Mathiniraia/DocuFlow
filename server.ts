@@ -663,11 +663,19 @@ app.get("/api/usage/status", async (req, res) => {
     });
   }
 
-  const key = getUsageKey(req, email);
-  
-  if (!ipUsageStore[key]) {
-    ipUsageStore[key] = { count: 0, unlockedUntil: 0, planName: "free" };
-    saveUsage();
+  const emailKey = email && email.trim() !== "" ? `email:${email.trim().toLowerCase()}` : null;
+  const ipKey = getUsageKey(req); // just gets the ip key
+
+  if (!ipUsageStore[ipKey]) ipUsageStore[ipKey] = { count: 0, unlockedUntil: 0, planName: "free" };
+  if (emailKey && !ipUsageStore[emailKey]) ipUsageStore[emailKey] = { count: 0, unlockedUntil: 0, planName: "free" };
+
+  const key = emailKey || ipKey;
+
+  // Sync counts so free attempts do not reset upon login
+  if (emailKey && key !== ipKey) {
+    const maxCount = Math.max(ipUsageStore[emailKey].count, ipUsageStore[ipKey].count);
+    ipUsageStore[emailKey].count = maxCount;
+    ipUsageStore[ipKey].count = maxCount;
   }
 
   const entry = ipUsageStore[key];
@@ -714,7 +722,6 @@ app.get("/api/usage/status", async (req, res) => {
 
 app.post("/api/usage/increment", async (req, res) => {
   const { email } = req.body;
-  const key = getUsageKey(req, email);
 
   // Sync tool usage to CRM tool analytics — insert one row per use
   const { toolSlug } = req.body;
@@ -728,8 +735,19 @@ app.post("/api/usage/increment", async (req, res) => {
       });
   }
 
-  if (!ipUsageStore[key]) {
-    ipUsageStore[key] = { count: 0, unlockedUntil: 0, planName: "free" };
+  const emailKey = email && email.trim() !== "" ? `email:${email.trim().toLowerCase()}` : null;
+  const ipKey = getUsageKey(req);
+
+  if (!ipUsageStore[ipKey]) ipUsageStore[ipKey] = { count: 0, unlockedUntil: 0, planName: "free" };
+  if (emailKey && !ipUsageStore[emailKey]) ipUsageStore[emailKey] = { count: 0, unlockedUntil: 0, planName: "free" };
+
+  const key = emailKey || ipKey;
+
+  // Sync counts so free attempts do not reset upon login
+  if (emailKey && key !== ipKey) {
+    const maxCount = Math.max(ipUsageStore[emailKey].count, ipUsageStore[ipKey].count);
+    ipUsageStore[emailKey].count = maxCount;
+    ipUsageStore[ipKey].count = maxCount;
   }
 
   const entry = ipUsageStore[key];
@@ -759,9 +777,12 @@ app.post("/api/usage/increment", async (req, res) => {
   }
 
   entry.count += 1;
+  
+  if (emailKey && key !== ipKey) {
+    ipUsageStore[ipKey].count = entry.count;
+  }
+  
   saveUsage();
-
-  // Sync usage count to Supabase
   if (email && email.trim()) {
     const encryptedEmail = encryptData(email);
     supabase
