@@ -871,7 +871,7 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
                       <thead className="bg-neutral-50 border-b border-neutral-100 text-[10px] font-bold uppercase tracking-wider text-neutral-400">
                         <tr>
                           <th className="px-5 py-3">Razorpay ID</th>
-                          <th className="px-5 py-3">Customer</th>
+                          <th className="px-5 py-3">Customer Email ID</th>
                           <th className="px-5 py-3">Plan Purchased</th>
                           <th className="px-5 py-3">Amount</th>
                           <th className="px-5 py-3">Date & Time</th>
