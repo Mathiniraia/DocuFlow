@@ -937,7 +937,7 @@ export default function ToolWorkspace({
           const y = Math.round(item.transform[5]); // Y coordinate
           if (currentY !== null && Math.abs(currentY - y) > 5) {
             if (currentLine.trim()) {
-              children.push(new Paragraph({ children: [new TextRun(currentLine)] }));
+              children.push(new Paragraph({ children: [new TextRun({ text: currentLine })] }));
             }
             currentLine = "";
             currentY = y;
@@ -948,14 +948,17 @@ export default function ToolWorkspace({
         }
       }
       if (currentLine.trim()) {
-        children.push(new Paragraph({ children: [new TextRun(currentLine)] }));
+        children.push(new Paragraph({ children: [new TextRun({ text: currentLine })] }));
       }
       
       // Try to simulate a page break if it's not the last page
-      // Paragraph doesn't have a direct pageBreak in simple initialization, so we just add spacing.
       if (i < numPages) {
-        children.push(new Paragraph({ text: "" }));
+        children.push(new Paragraph({ children: [new TextRun({ text: "" })] }));
       }
+    }
+
+    if (children.length === 0) {
+      children.push(new Paragraph({ children: [new TextRun({ text: "No text found in PDF." })] }));
     }
 
     const doc = new Document({
