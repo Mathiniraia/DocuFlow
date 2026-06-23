@@ -21,6 +21,7 @@ interface PaywallModalProps {
   currentUserEmail: string | null;
   planExpiresAt: number | null;  // ms timestamp — null if no active plan
   onUserSignedIn: (email: string) => void;
+  forcePlans?: boolean;
 }
 
 const PLANS: PaymentPlan[] = [
@@ -95,9 +96,12 @@ export default function PaywallModal({
   currentUserEmail,
   planExpiresAt,
   onUserSignedIn,
+  forcePlans = false,
 }: PaywallModalProps) {
   const [selectedPlan, setSelectedPlan] = useState<PaymentPlan>(PLANS[1]);
-  const [step, setStep] = useState<ModalStep>(usageLimitReached ? "limit_warning" : "plans");
+  const [step, setStep] = useState<ModalStep>(
+    forcePlans ? "plans" : usageLimitReached ? "limit_warning" : "plans"
+  );
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -143,13 +147,13 @@ export default function PaywallModal({
       if (planExpiresAt && planExpiresAt > Date.now()) {
         setStep("active_subscription");
       } else {
-        setStep(usageLimitReached ? "limit_warning" : "plans");
+        setStep(forcePlans ? "plans" : usageLimitReached ? "limit_warning" : "plans");
       }
       setErrorMessage("");
       setShowSandboxUI(false);
     }
     prevIsOpen.current = isOpen;
-  }, [isOpen, usageLimitReached, planExpiresAt]);
+  }, [isOpen, usageLimitReached, planExpiresAt, forcePlans]);
 
   useEffect(() => {
     const script = document.createElement("script");

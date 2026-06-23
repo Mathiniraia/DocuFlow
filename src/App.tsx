@@ -29,6 +29,7 @@ export default function App() {
   
   // Paywall states
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
+  const [paywallForcePlans, setPaywallForcePlans] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
   const [premiumUnlocked, setPremiumUnlocked] = useState(false);
   const [premiumPlanName, setPremiumPlanName] = useState("");
@@ -300,6 +301,7 @@ export default function App() {
       if (path === "premium") {
         setCurrentSlug("");
         window.history.replaceState(null, "", "/");
+        setPaywallForcePlans(true);
         setIsPaywallOpen(true);
         return;
       }
@@ -441,6 +443,7 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("action") === "unlock") {
+      setPaywallForcePlans(true);
       setIsPaywallOpen(true);
       // Clean up the URL so it doesn't reopen on refresh
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -1454,7 +1457,10 @@ export default function App() {
 
                   <div className="pt-2">
                     <button
-                      onClick={() => setIsPaywallOpen(true)}
+                      onClick={() => {
+                        setPaywallForcePlans(true);
+                        setIsPaywallOpen(true);
+                      }}
                       className="bg-neutral-950 hover:bg-black text-white font-bold text-sm tracking-wide py-3.5 px-16 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg cursor-pointer text-center w-64 inline-flex items-center justify-center gap-2"
                     >
                       Unlock Pro
@@ -1587,7 +1593,10 @@ export default function App() {
             <button onClick={() => navigateToSlug("compress-pdf")} className="hover:text-black transition-colors cursor-pointer">Compress</button>
             <button onClick={() => navigateToSlug("protect-pdf")} className="hover:text-black transition-colors cursor-pointer">Protect</button>
             <button 
-              onClick={() => setIsPaywallOpen(true)} 
+              onClick={() => {
+                setPaywallForcePlans(true);
+                setIsPaywallOpen(true);
+              }} 
               className="bg-black hover:bg-neutral-800 text-white font-bold px-4 py-2 rounded-lg text-sm transition duration-200 cursor-pointer select-none"
             >
               Unlock Pro
@@ -1599,11 +1608,15 @@ export default function App() {
       {/* RAZORPAY BILLING AND PAYWALL GATEWAY MODAL */}
       <PaywallModal 
         isOpen={isPaywallOpen}
-        onClose={() => setIsPaywallOpen(false)}
+        onClose={() => {
+          setIsPaywallOpen(false);
+          setPaywallForcePlans(false);
+        }}
         onPaymentSuccess={handlePaymentSuccessUnlock}
         usageLimitReached={usageCount >= 3}
         currentUserEmail={currentUserEmail}
         planExpiresAt={planExpiresAt}
+        forcePlans={paywallForcePlans}
         onUserSignedIn={(email) => {
           setCurrentUserEmail(email);
           localStorage.setItem("user_email", email);
