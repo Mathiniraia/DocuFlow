@@ -292,7 +292,7 @@ app.post("/api/razorpay/verify", async (req, res) => {
 // ────────────────────────────────────────────────────────────────────────────
 const _pdfUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === "application/pdf") {
       cb(null, true);

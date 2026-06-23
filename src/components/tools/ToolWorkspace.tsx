@@ -8,7 +8,7 @@ import {
   FileText, CheckCircle, RefreshCw, Download, 
   Trash2, RotateCw, Shield, AlertTriangle,
   Scissors, FileImage, Layers, ShieldCheck, Minimize2,
-  Lock, Plus, X, ArrowRight, Settings, Check, Clock, Calendar, Sparkles, ChevronRight
+  Lock, Plus, X, ArrowRight, Settings, Check, Clock, Calendar, Sparkles, ChevronRight, Crown
 } from "lucide-react";
 import { PDFDocument, degrees } from "pdf-lib";
 import { PDFFileInfo, ToolWorkspaceProps } from "../../types";
@@ -54,6 +54,7 @@ export default function ToolWorkspace({
   // File drag & hover state
   const [dragActive, setDragActive] = useState(false);
   const [dragError, setDragError] = useState("");
+  const [showSizeUpgradeModal, setShowSizeUpgradeModal] = useState(false);
 
   // Target values for specific tools
   // split-pdf
@@ -164,12 +165,19 @@ export default function ToolWorkspace({
       const isJpgToPdf = tool.slug === "jpg-to-pdf";
       const validFiles: PDFFileInfo[] = [];
       const isServerTool = tool.slug === "protect-pdf" || tool.slug === "unlock-pdf";
-      const MAX_FILE_SIZE = isServerTool ? 50 * 1024 * 1024 : 500 * 1024 * 1024; // 50MB for server, 500MB for local
+      const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB max limit for all tools
+      const FREE_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit for free users
 
       for (const file of rawFiles) {
+        // Pro Upgrade check
+        if (file.size > FREE_FILE_SIZE && !isPremium) {
+          setShowSizeUpgradeModal(true);
+          return;
+        }
+
         // File size guard
         if (file.size > MAX_FILE_SIZE) {
-          setDragError(`File "${file.name}" exceeds the ${isServerTool ? "50MB" : "500MB"} limit. Please use a smaller file.`);
+          setDragError(`File "${file.name}" exceeds the 500MB limit. Please use a smaller file.`);
           return;
         }
 
@@ -1867,6 +1875,39 @@ export default function ToolWorkspace({
         </div>
 
       </div>
+
+      {showSizeUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl relative">
+            <button 
+              onClick={() => setShowSizeUpgradeModal(false)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-black transition-colors"
+            >
+              <X size={24} />
+            </button>
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg">
+                <Crown size={32} />
+              </div>
+              <h3 className="text-2xl font-bold text-black mb-3 tracking-tight">Need More Flexibility?</h3>
+              <p className="text-neutral-500 leading-relaxed mb-8">
+                Files above 100 MB are available only for Pro users.<br/><br/>
+                Unlock Pro to process larger files and enjoy unlimited access.
+              </p>
+              <button
+                onClick={() => {
+                  setShowSizeUpgradeModal(false);
+                  if (onLimitExceeded) onLimitExceeded();
+                }}
+                className="w-full bg-black text-white rounded-xl py-4 font-bold text-lg hover:-translate-y-1 hover:shadow-xl transition-all duration-300"
+              >
+                Unlock Pro
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
