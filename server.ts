@@ -489,7 +489,7 @@ app.post("/api/cron/expiry-reminders", async (req, res) => {
   try {
     const { data: users, error } = await supabase
       .from("crm_users")
-      .select("encrypted_email, display_name, plan_expires_at, plan_status");
+      .select("encrypted_email, display_name, plan_expires_at, plan_status, created_at");
 
     if (error) throw error;
 
@@ -500,40 +500,71 @@ app.post("/api/cron/expiry-reminders", async (req, res) => {
     const appUrl = "https://trustmypdf.in";
 
     for (const u of users || []) {
-      if (!u.plan_expires_at || u.plan_status === "free" || !u.encrypted_email) continue;
-      
-      const expiresAt = new Date(u.plan_expires_at).getTime();
-      const hoursUntilExpiry = (expiresAt - now) / (1000 * 60 * 60);
+      if (!u.encrypted_email) continue;
+      const email = decryptData(u.encrypted_email);
+      if (email === "Decryption Error" || !email.includes("@")) continue;
+      const name = u.display_name || email.split("@")[0];
 
-      // Send email if they expire in exactly 24-48 hours
-      if (hoursUntilExpiry > 24 && hoursUntilExpiry <= 48) {
-        const email = decryptData(u.encrypted_email);
-        if (email === "Decryption Error" || !email.includes("@")) continue;
-
-        const name = u.display_name || email.split("@")[0];
-
-        await transporter.sendMail({
-          from: SENDER_EMAIL,
-          to: email,
-          subject: "Your Trust My PDF Pro Plan expires tomorrow! ⏳",
-          html: `
-            <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
-              <h2 style="color: #000;">Hi ${name},</h2>
-              <p>Your <strong>${u.plan_status === 'pro' ? 'Pro' : u.plan_status}</strong> plan on Trust My PDF is expiring in less than 48 hours.</p>
-              
-              <div style="background-color: #fef2f2; border: 1px solid #fecaca; padding: 20px; border-radius: 12px; margin: 30px 0;">
-                <h3 style="margin-top: 0; color: #b91c1c;">Don't lose your unlimited access!</h3>
-                <p>To avoid losing priority cloud processing and unlimited usage of all PDF tools, please renew your plan.</p>
-                <div style="text-align: center; margin-top: 25px;">
-                  <a href="${appUrl}/?action=unlock" style="background-color: #dc2626; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Renew Plan Now</a>
+      if (u.plan_status === "free") {
+        if (u.created_at) {
+          const createdAt = new Date(u.created_at).getTime();
+          const hoursSinceSignup = (now - createdAt) / (1000 * 60 * 60);
+          
+          if (hoursSinceSignup > 24 && hoursSinceSignup <= 48) {
+            await transporter.sendMail({
+              from: SENDER_EMAIL,
+              to: email,
+              subject: "Unlock the full power of Trust My PDF 🚀",
+              html: `
+                <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+                  <h2 style="color: #000;">Hi ${name},</h2>
+                  <p>I hope you're enjoying Trust My PDF so far!</p>
+                  <p>I noticed you are currently using the free version. Did you know that with a Premium plan, you get <strong>unlimited PDF operations</strong>, <strong>priority cloud processing speed</strong>, and absolutely <strong>zero usage limits</strong>?</p>
+                  
+                  <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 12px; margin: 30px 0;">
+                    <h3 style="margin-top: 0; color: #0f172a;">Special Upgrade Offer</h3>
+                    <p>Upgrade today to save hours of time every week on your document workflows.</p>
+                    <div style="text-align: center; margin-top: 25px;">
+                      <a href="${appUrl}/?action=unlock" style="background-color: #000; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">See Premium Plans</a>
+                    </div>
+                  </div>
+                  
+                  <p>Best regards,<br/>The Trust My PDF Team</p>
                 </div>
+              `,
+            });
+            emailsSent++;
+          }
+        }
+      } else if (u.plan_expires_at) {
+        const expiresAt = new Date(u.plan_expires_at).getTime();
+        const hoursUntilExpiry = (expiresAt - now) / (1000 * 60 * 60);
+
+        // Send expiry reminder email if they expire in exactly 24-48 hours
+        if (hoursUntilExpiry > 24 && hoursUntilExpiry <= 48) {
+          await transporter.sendMail({
+            from: SENDER_EMAIL,
+            to: email,
+            subject: "Your Trust My PDF Pro Plan expires tomorrow! ⏳",
+            html: `
+              <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+                <h2 style="color: #000;">Hi ${name},</h2>
+                <p>Your <strong>${u.plan_status === 'pro' ? 'Pro' : u.plan_status}</strong> plan on Trust My PDF is expiring in less than 48 hours.</p>
+                
+                <div style="background-color: #fef2f2; border: 1px solid #fecaca; padding: 20px; border-radius: 12px; margin: 30px 0;">
+                  <h3 style="margin-top: 0; color: #b91c1c;">Don't lose your unlimited access!</h3>
+                  <p>To avoid losing priority cloud processing and unlimited usage of all PDF tools, please renew your plan.</p>
+                  <div style="text-align: center; margin-top: 25px;">
+                    <a href="${appUrl}/?action=unlock" style="background-color: #dc2626; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Renew Plan Now</a>
+                  </div>
+                </div>
+                
+                <p>Best regards,<br/>The Trust My PDF Team</p>
               </div>
-              
-              <p>Best regards,<br/>The Trust My PDF Team</p>
-            </div>
-          `,
-        });
-        emailsSent++;
+            `,
+          });
+          emailsSent++;
+        }
       }
     }
 
