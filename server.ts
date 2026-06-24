@@ -66,7 +66,7 @@ async function getEmailTransporter() {
   return emailTransporter;
 }
 
-const SENDER_EMAIL = process.env.SMTP_FROM || '"Trust My PDF" <hello@trustmypdf.in>';
+const SENDER_EMAIL = process.env.SMTP_FROM || '"Trust My PDF" <onboarding@resend.dev>';
 
 function buildEmailTemplate(title: string, bodyHtml: string) {
   return `
@@ -79,13 +79,13 @@ function buildEmailTemplate(title: string, bodyHtml: string) {
         body { margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"; -webkit-font-smoothing: antialiased; }
         .wrapper { width: 100%; table-layout: fixed; background-color: #f8fafc; padding-bottom: 40px; }
         .main { background-color: #ffffff; margin: 0 auto; width: 100%; max-width: 600px; border-spacing: 0; font-family: sans-serif; color: #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); margin-top: 40px; }
-        .header { padding: 30px; text-align: center; border-bottom: 1px solid #f1f5f9; }
-        .header h1 { margin: 0; font-size: 20px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px; text-transform: uppercase; }
+        .header { padding: 30px; text-align: center; border-bottom: 1px solid #f1f5f9; background: linear-gradient(90deg, #eff6ff 0%, #fdf4ff 100%); border-top: 4px solid #6366f1; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 800; background: -webkit-linear-gradient(45deg, #4f46e5, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.5px; }
         .content { padding: 40px 30px; line-height: 1.6; font-size: 16px; }
         .content h2 { color: #0f172a; font-size: 22px; margin-top: 0; margin-bottom: 20px; font-weight: 700; }
         .content p { margin-top: 0; margin-bottom: 20px; }
         .button-wrap { text-align: center; margin: 35px 0; }
-        .button { background-color: #0f172a; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 16px; }
+        .button { background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
         .card { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 25px; border-radius: 12px; margin: 30px 0; text-align: center; }
         .card-danger { background-color: #fef2f2; border: 1px solid #fecaca; padding: 25px; border-radius: 12px; margin: 30px 0; text-align: center; }
         .card-success { background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 25px; border-radius: 12px; margin: 30px 0; text-align: center; }
