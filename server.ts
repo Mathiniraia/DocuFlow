@@ -9,7 +9,7 @@ import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import multer from "multer";
 import { createRequire } from "module";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 // ── qpdf-WASM: initialise once and reuse across all requests ──────────────
 // @neslinesli93/qpdf-wasm ships a CJS module with an inline WASM loader.
@@ -32,41 +32,10 @@ app.use(cors());
 
 const PORT = 5173;
 
-// Email Transporter Setup
-let emailTransporter: nodemailer.Transporter;
+// Resend Setup
+const resend = new Resend(process.env.RESEND_API_KEY || "re_dummy_key");
 
-async function getEmailTransporter() {
-  if (emailTransporter) return emailTransporter;
-
-  if (process.env.SMTP_USER) {
-    emailTransporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
-      port: parseInt(process.env.SMTP_PORT || "587"),
-      secure: process.env.SMTP_SECURE === "true" || false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-  } else {
-    // Automatically create a free Ethereal test account if no real credentials are provided
-    console.log("No SMTP_USER found in .env. Creating a temporary Ethereal test account for emails...");
-    const testAccount = await nodemailer.createTestAccount();
-    emailTransporter = nodemailer.createTransport({
-      host: testAccount.smtp.host,
-      port: testAccount.smtp.port,
-      secure: testAccount.smtp.secure,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-    console.log("Ethereal test account created successfully.");
-  }
-  return emailTransporter;
-}
-
-const SENDER_EMAIL = process.env.SMTP_FROM || '"Trust My PDF" <onboarding@resend.dev>';
+const SENDER_EMAIL = process.env.SMTP_FROM || '"Trust My PDF" <support@trustmypdf.in>';
 
 function buildEmailTemplate(title: string, bodyHtml: string) {
   return `
@@ -128,8 +97,7 @@ app.post("/api/emails/welcome", async (req, res) => {
   const appUrl = "https://trustmypdf.in";
 
   try {
-    const transporter = await getEmailTransporter();
-    const info = await transporter.sendMail({
+    const { data, error: resendErr } = await resend.emails.send({
       from: SENDER_EMAIL,
       to: email,
       subject: "Welcome to Trust My PDF! 🎉",
@@ -146,9 +114,8 @@ app.post("/api/emails/welcome", async (req, res) => {
         </div>
       `),
     });
+    if (resendErr) throw new Error(resendErr.message);
     console.log(`[Email] Welcome email sent to ${email}`);
-    const testUrl = nodemailer.getTestMessageUrl(info);
-    if (testUrl) console.log(`[Ethereal Test URL]: ${testUrl}`);
     res.json({ success: true });
   } catch (error) {
     console.error("[Email Error] Failed to send welcome email:", error);
@@ -235,8 +202,7 @@ app.post("/api/razorpay/verify", async (req, res) => {
   const sendPaymentSuccessEmail = async (userEmail: string, plan: string, duration: string) => {
     if (!userEmail) return;
     try {
-      const transporter = await getEmailTransporter();
-      const info = await transporter.sendMail({
+      const { error: resendErr } = await resend.emails.send({
         from: SENDER_EMAIL,
         to: userEmail,
         subject: `Payment Successful! Welcome to ${plan} 🚀`,
@@ -249,9 +215,8 @@ app.post("/api/razorpay/verify", async (req, res) => {
           <p>Go ahead and do yourself whatever you want with your documents! We are thrilled to have your support.</p>
         `),
       });
+      if (resendErr) throw new Error(resendErr.message);
       console.log(`[Email] Payment success email sent to ${userEmail}`);
-      const testUrl = nodemailer.getTestMessageUrl(info);
-      if (testUrl) console.log(`[Ethereal Test URL]: ${testUrl}`);
     } catch (e) {
       console.error("[Email Error] Failed to send payment success email:", e);
     }
@@ -539,7 +504,6 @@ app.post("/api/cron/expiry-reminders", async (req, res) => {
     const now = Date.now();
     let emailsSent = 0;
 
-    const transporter = await getEmailTransporter();
     const appUrl = "https://trustmypdf.in";
 
     for (const u of users || []) {
@@ -553,8 +517,8 @@ app.post("/api/cron/expiry-reminders", async (req, res) => {
           const createdAt = new Date(u.created_at).getTime();
           const hoursSinceSignup = (now - createdAt) / (1000 * 60 * 60);
           
-          if (hoursSinceSignup > 24 && hoursSinceSignup <= 48) {
-            await transporter.sendMail({
+          try {
+            await resend.emails.send({
               from: SENDER_EMAIL,
               to: email,
               subject: "Unlock the full power of Trust My PDF 🚀",
@@ -572,6 +536,8 @@ app.post("/api/cron/expiry-reminders", async (req, res) => {
               `),
             });
             emailsSent++;
+          } catch (e) {
+            console.error("Failed to send upgrade email:", e);
           }
         }
       } else if (u.plan_expires_at) {
@@ -580,7 +546,7 @@ app.post("/api/cron/expiry-reminders", async (req, res) => {
 
         // Send expiry reminder email if they expire in exactly 24-48 hours
         if (hoursUntilExpiry > 24 && hoursUntilExpiry <= 48) {
-          await transporter.sendMail({
+          await resend.emails.send({
             from: SENDER_EMAIL,
             to: email,
             subject: "Your Trust My PDF Pro Plan expires tomorrow! ⏳",
@@ -1348,27 +1314,16 @@ Trust My PDF System Security
 
   let sentInfo = "Email logged to sent_emails.log and console.";
   try {
-    const nodemailer = await import("nodemailer").catch(() => null);
-    if (nodemailer && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      const transporter = nodemailer.default.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || "587"),
-        secure: process.env.SMTP_SECURE === "true",
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
-      await transporter.sendMail({
-        from: `"Trust My PDF Security" <${process.env.SMTP_USER}>`,
-        to: creds.email,
-        subject: "Trust My PDF Admin CRM - Password Reset",
-        text: emailContent.split("\n\n").slice(2).join("\n\n")
-      });
-      sentInfo = "A reset password has been dispatched to your inbox.";
-    }
+    const { error: resendErr } = await resend.emails.send({
+      from: `"Trust My PDF Security" <${SENDER_EMAIL}>`,
+      to: creds.email,
+      subject: "Trust My PDF Admin CRM - Password Reset",
+      text: emailContent.split("\n\n").slice(2).join("\n\n")
+    });
+    if (resendErr) throw new Error(resendErr.message);
+    sentInfo = "A reset password has been dispatched to your inbox.";
   } catch (err: any) {
-    console.warn("[Nodemailer Transporter Warning]:", err.message);
+    console.warn("[Resend Warning]:", err.message);
   }
 
   res.json({
@@ -1567,8 +1522,7 @@ setInterval(async () => {
         saveUsage();
         
         try {
-          const transporter = await getEmailTransporter();
-          const info = await transporter.sendMail({
+          const { error: resendErr } = await resend.emails.send({
             from: SENDER_EMAIL,
             to: email,
             subject: "Your Trust My PDF Pro access is expiring soon ⏳",
@@ -1587,9 +1541,8 @@ setInterval(async () => {
               </div>
             `,
           });
+          if (resendErr) throw new Error(resendErr.message);
           console.log(`[Email] Expiration reminder sent to ${email}`);
-          const testUrl = nodemailer.getTestMessageUrl(info);
-          if (testUrl) console.log(`[Ethereal Test URL]: ${testUrl}`);
         } catch (e) {
           console.error("[Email Error] Failed to send expiration reminder:", e);
         }
