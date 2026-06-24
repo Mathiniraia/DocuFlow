@@ -10,7 +10,8 @@ import {
   Clock, Calendar, Zap, Chrome, Phone, AlertCircle, CheckCircle2
 } from "lucide-react";
 import { PaymentPlan } from "../../types";
-import { signInWithPopup, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, getAdditionalUserInfo } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, getAdditionalUserInfo } from "firebase/auth";
+import { API_BASE } from "../../config";
 import { auth, googleProvider } from "../../firebase";
 
 interface PaywallModalProps {
@@ -184,7 +185,7 @@ export default function PaywallModal({
       
       // Trigger welcome email if they are a brand new signup
       if (additionalInfo?.isNewUser && email) {
-        fetch("/api/emails/welcome", {
+        fetch(`${API_BASE}/api/emails/welcome`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: email, displayName: result.user.displayName })
@@ -211,7 +212,7 @@ export default function PaywallModal({
     // We assume any explicit email/password form submission here is a "signup" 
     // because there is no separate login tab in this quick flow.
     // We send the welcome email in the background.
-    fetch("/api/emails/welcome", {
+    fetch(`${API_BASE}/api/emails/welcome`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: emailInput })
@@ -301,7 +302,7 @@ export default function PaywallModal({
       onUserSignedIn(finalEmail);
       
       try {
-        await fetch("/api/crm/sync-user", {
+        await fetch(`${API_BASE}/api/crm/sync-user`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: finalEmail, planExpiresAt: null }),
@@ -329,7 +330,7 @@ export default function PaywallModal({
     setShowSandboxUI(false);
 
     try {
-      const res = await fetch("/api/razorpay/order", {
+      const res = await fetch(`${API_BASE}/api/razorpay/order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount: selectedPlan.price, planId: selectedPlan.id }),
@@ -358,7 +359,7 @@ export default function PaywallModal({
         handler: async (response: any) => {
           setLoading(true);
           try {
-            const verifyRes = await fetch("/api/razorpay/verify", {
+            const verifyRes = await fetch(`${API_BASE}/api/razorpay/verify`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -403,7 +404,7 @@ export default function PaywallModal({
     let planLabel = selectedPlan.name;
 
     try {
-      const res = await fetch("/api/usage/unlock", {
+      const res = await fetch(`${API_BASE}/api/usage/unlock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, planId: selectedPlan.id, paymentId, orderId }),

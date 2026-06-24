@@ -12,7 +12,8 @@ import {
   Bold, Italic, Underline, Palette, Type, Move
 } from "lucide-react";
 import { PDFDocument, degrees, StandardFonts, rgb, rgb as pdfRgb } from "pdf-lib";
-import { PDFFileInfo, ToolWorkspaceProps } from "../../types";
+import { PDFFileInfo, ToolWorkspaceProps, ToolDefinition } from "../../types";
+import { API_BASE } from "../../config";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import mammoth from "mammoth";
@@ -873,7 +874,6 @@ export default function ToolWorkspace({
     formData.append("file", pdfBlob, f.name);
     formData.append("password", capturedPassword);
 
-    const API_BASE = import.meta.env.DEV ? "" : "https://pdfeasy-backend.onrender.com";
     const response = await fetch(`${API_BASE}/api/protect-pdf`, {
       method: "POST",
       body: formData,
@@ -936,7 +936,6 @@ export default function ToolWorkspace({
     formData.append("file", pdfBlob, f.name);
     formData.append("password", capturedPw);
 
-    const API_BASE = import.meta.env.DEV ? "" : "https://pdfeasy-backend.onrender.com";
     const response = await fetch(`${API_BASE}/api/unlock-pdf`, {
       method: "POST",
       body: formData,

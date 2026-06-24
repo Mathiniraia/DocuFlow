@@ -22,6 +22,7 @@ import BlogList from "./components/blog/BlogList";
 import BlogPost from "./components/blog/BlogPost";
 import PrivacyPolicy from "./components/legal/PrivacyPolicy";
 import TermsOfService from "./components/legal/TermsOfService";
+import { API_BASE } from "./config";
 import { BLOG_POSTS } from "./blogData";
 import { signInWithPopup, signInWithRedirect, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, getAdditionalUserInfo } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
@@ -162,7 +163,7 @@ export default function App() {
   ) => {
     try {
       const isEmail = contactInfo.includes("@") && !contactInfo.endsWith("@phone.otp");
-      await fetch("/api/crm/sync-user", {
+      await fetch(`${API_BASE}/api/crm/sync-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -431,7 +432,7 @@ export default function App() {
 
         // Automated background sync request
         try {
-          const response = await fetch("/api/crm/sync-user", {
+          const response = await fetch(`${API_BASE}/api/crm/sync-user`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -531,7 +532,7 @@ export default function App() {
     try {
       const email = localStorage.getItem("user_email") || "";
       const localUsage = localStorage.getItem("free_usage_count") || "0";
-      const response = await fetch("/api/usage/increment", {
+      const response = await fetch(`${API_BASE}/api/usage/increment`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -564,7 +565,7 @@ export default function App() {
   const handleLogAction = async (toolSlug: string, actionType: string) => {
     try {
       const email = localStorage.getItem("user_email") || "";
-      await fetch("/api/usage/log-action", {
+      await fetch(`${API_BASE}/api/usage/log-action`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -615,7 +616,7 @@ export default function App() {
     setUsageCount(0);
     const email = localStorage.getItem("user_email") || "";
     try {
-      await fetch("/api/usage/reset", {
+      await fetch(`${API_BASE}/api/usage/reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -874,7 +875,7 @@ export default function App() {
                             
                             // Trigger welcome email if they are a brand new signup
                             if (additionalInfo?.isNewUser && credential.user.email) {
-                              fetch("/api/emails/welcome", {
+                              fetch(`${API_BASE}/api/emails/welcome`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({

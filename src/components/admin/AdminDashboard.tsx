@@ -6,15 +6,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from "react";
-import {
-  Shield, Users, Mail, CheckCircle, XCircle, Clock,
-  Calendar, Zap, RefreshCw, X, Crown, AlertTriangle,
-  UserCheck, Send, Search, Star, Phone, Activity,
-  ChevronDown, TrendingUp, DollarSign, Lock, Download
-} from "lucide-react";
+import { BarChart, Users, DollarSign, Shield, Lock, Unlock, Search, CheckCircle } from "lucide-react";
+import { API_BASE } from "../../config";
 
 const ADMIN_SECRET = "pdfeasy-admin-secret-2024";
-const API_BASE = "";  // same origin — works on both local and production
+// API calls will use API_BASE from config
 
 export function isAdminEmail(email: string | null): boolean {
   const ADMIN_EMAILS = ["trustmypdf@gmail.com"];

@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { signInWithPopup, signOut } from "firebase/auth";
 import { auth, googleProvider } from "../../firebase";
+import { API_BASE } from "../../config";
 import {
   Users, CreditCard, BarChart3, RefreshCw, Shield,
   Mail, Clock, Crown, Ban, Zap, Search, CheckCircle,
@@ -146,7 +147,7 @@ function AdminLoginGate({ onAuth }: { onAuth: (email: string) => void }) {
     }
     setLoading(true); setError(""); setSuccess("");
     try {
-      const response = await fetch("/api/admin/login", {
+      const response = await fetch(`${API_BASE}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
@@ -169,7 +170,7 @@ function AdminLoginGate({ onAuth }: { onAuth: (email: string) => void }) {
     }
     setLoading(true); setError(""); setSuccess("");
     try {
-      const response = await fetch("/api/admin/forgot-password", {
+      const response = await fetch(`${API_BASE}/api/admin/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: forgotEmail })
@@ -445,9 +446,9 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
     const H = { "Content-Type": "application/json", "x-admin-secret": ADMIN_SECRET };
     try {
       const [uR, tR, aR] = await Promise.all([
-        fetch("/api/admin/crm-users",     { headers: H }),
-        fetch("/api/admin/transactions",  { headers: H }),
-        fetch("/api/admin/tool-analytics",{ headers: H }),
+        fetch(`${API_BASE}/api/admin/crm-users`,     { headers: H }),
+        fetch(`${API_BASE}/api/admin/transactions`,  { headers: H }),
+        fetch(`${API_BASE}/api/admin/tool-analytics`,{ headers: H }),
       ]);
       if (uR.ok) { const j = await uR.json(); setUsers(j.users || []); }
       if (tR.ok) { const j = await tR.json(); setTxns(j.transactions || []); }
@@ -462,7 +463,7 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
   const grantAccess = async (email: string, planId: string) => {
     setActing(`${email}:${planId}`);
     try {
-      const r = await fetch("/api/admin/grant-access", {
+      const r = await fetch(`${API_BASE}/api/admin/grant-access`, {
         method:"POST", headers:{"Content-Type":"application/json","x-admin-secret":ADMIN_SECRET},
         body: JSON.stringify({ email, planId }),
       });
@@ -477,7 +478,7 @@ export default function AdminPage({ currentUserEmail, onBack }: AdminPageProps) 
     if (!confirm(`Revoke ALL access for ${email}?`)) return;
     setActing(`${email}:revoke`);
     try {
-      const r = await fetch("/api/admin/revoke-access", {
+      const r = await fetch(`${API_BASE}/api/admin/revoke-access`, {
         method:"POST", headers:{"Content-Type":"application/json","x-admin-secret":ADMIN_SECRET},
         body: JSON.stringify({ email }),
       });
