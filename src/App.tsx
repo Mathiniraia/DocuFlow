@@ -18,6 +18,9 @@ const ToolWorkspace = lazy(() => import("./components/tools/ToolWorkspace"));
 import PaywallModal from "./components/payment/PaywallModal";
 import AdminDashboard, { isAdminEmail } from "./components/admin/AdminDashboard";
 import AdminPage from "./components/admin/AdminPage";
+import BlogList from "./components/blog/BlogList";
+import BlogPost from "./components/blog/BlogPost";
+import { BLOG_POSTS } from "./blogData";
 import { signInWithPopup, signInWithRedirect, onAuthStateChanged, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult, getAdditionalUserInfo } from "firebase/auth";
 import { auth, googleProvider } from "./firebase";
 import { logUserActivity } from "./lib/logUserActivity";
@@ -298,6 +301,17 @@ export default function App() {
         return;
       }
       setShowAdminPage(false);
+      
+      // Blog routing
+      if (path === "blog") {
+        setCurrentSlug("blog");
+        return;
+      }
+      if (path.startsWith("blog/")) {
+        setCurrentSlug(path); // e.g. "blog/welcome-to-trust-my-pdf"
+        return;
+      }
+
       if (path === "premium") {
         setCurrentSlug("");
         window.history.replaceState(null, "", "/");
@@ -621,6 +635,20 @@ export default function App() {
     );
   }
 
+  // ── /blog route: render blog pages full-screen ──────────────────────
+  if (currentSlug === "blog") {
+    return <BlogList />;
+  }
+
+  if (currentSlug.startsWith("blog/")) {
+    const slug = currentSlug.split("blog/")[1];
+    const post = BLOG_POSTS.find(p => p.slug === slug);
+    if (!post) {
+      return <BlogList />;
+    }
+    return <BlogPost post={post} />;
+  }
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-neutral-900 selection:text-white" id="main_app_canvas">
       
@@ -642,9 +670,18 @@ export default function App() {
               <span className="text-[9px] text-neutral-400 font-medium font-mono uppercase block tracking-wider -mt-[1px]">One Tool for Every PDF Need</span>
             </div>
           </button>
-
-           {/* User limit states / Auth status on far right */}
+          {/* User limit states / Auth status on far right */}
           <div className="flex items-center gap-4">
+            
+            <button 
+              onClick={() => {
+                window.history.pushState(null, "", "/blog");
+                window.dispatchEvent(new PopStateEvent("popstate"));
+              }}
+              className="hidden md:flex text-sm font-bold text-neutral-600 hover:text-black hover:bg-neutral-100 px-4 py-2 rounded-lg transition-colors"
+            >
+              Resources
+            </button>
 
 
             {currentUserEmail ? (
