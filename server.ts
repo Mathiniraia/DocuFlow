@@ -74,7 +74,7 @@ app.post("/api/emails/welcome", async (req, res) => {
   if (!email) return res.status(400).json({ error: "Email is required" });
 
   const name = displayName || email.split("@")[0];
-  const appUrl = "https://pdf-easy-zeta.vercel.app";
+  const appUrl = "https://trustmypdf.in";
 
   try {
     const transporter = await getEmailTransporter();
@@ -478,6 +478,71 @@ function notifyCRM(payload: Record<string, any>) {
     body: JSON.stringify(payload)
   }).catch(err => console.warn("[CRM] Webhook unreachable (non-blocking):", err.message));
 }
+
+// CRON: Send Expiry Reminders
+app.post("/api/cron/expiry-reminders", async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
+
+  try {
+    const { data: users, error } = await supabase
+      .from("crm_users")
+      .select("encrypted_email, display_name, plan_expires_at, plan_status");
+
+    if (error) throw error;
+
+    const now = Date.now();
+    let emailsSent = 0;
+
+    const transporter = await getEmailTransporter();
+    const appUrl = "https://trustmypdf.in";
+
+    for (const u of users || []) {
+      if (!u.plan_expires_at || u.plan_status === "free" || !u.encrypted_email) continue;
+      
+      const expiresAt = new Date(u.plan_expires_at).getTime();
+      const hoursUntilExpiry = (expiresAt - now) / (1000 * 60 * 60);
+
+      // Send email if they expire in exactly 24-48 hours
+      if (hoursUntilExpiry > 24 && hoursUntilExpiry <= 48) {
+        const email = decryptData(u.encrypted_email);
+        if (email === "Decryption Error" || !email.includes("@")) continue;
+
+        const name = u.display_name || email.split("@")[0];
+
+        await transporter.sendMail({
+          from: SENDER_EMAIL,
+          to: email,
+          subject: "Your Trust My PDF Pro Plan expires tomorrow! ⏳",
+          html: `
+            <div style="font-family: sans-serif; max-w: 600px; margin: 0 auto; color: #333; line-height: 1.6;">
+              <h2 style="color: #000;">Hi ${name},</h2>
+              <p>Your <strong>${u.plan_status === 'pro' ? 'Pro' : u.plan_status}</strong> plan on Trust My PDF is expiring in less than 48 hours.</p>
+              
+              <div style="background-color: #fef2f2; border: 1px solid #fecaca; padding: 20px; border-radius: 12px; margin: 30px 0;">
+                <h3 style="margin-top: 0; color: #b91c1c;">Don't lose your unlimited access!</h3>
+                <p>To avoid losing priority cloud processing and unlimited usage of all PDF tools, please renew your plan.</p>
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="${appUrl}/?action=unlock" style="background-color: #dc2626; color: #fff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Renew Plan Now</a>
+                </div>
+              </div>
+              
+              <p>Best regards,<br/>The Trust My PDF Team</p>
+            </div>
+          `,
+        });
+        emailsSent++;
+      }
+    }
+
+    res.json({ success: true, emailsSent });
+  } catch (err: any) {
+    console.error("[CRON Error] Expiry reminders failed:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.post("/api/crm/sync-user", async (req, res) => {
   try {
